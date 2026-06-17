@@ -52,7 +52,7 @@ export default function ParentDashboard() {
     <div className="min-h-screen bg-[#07090e] flex flex-col">
       {/* Header */}
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
           <ShieldCheck className="w-6 h-6 text-[#10b981]" />
           <div>
             <span className="font-display font-black text-xs uppercase tracking-wider text-slate-200 block">
@@ -60,14 +60,22 @@ export default function ParentDashboard() {
             </span>
             <span className="text-[9px] text-slate-500 font-bold block mt-0.5">Representante: Ricardo García</span>
           </div>
-        </div>
-        <Link 
-          href="/login"
-          className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs flex items-center gap-1.5 transition-all"
-        >
-          <LogOut className="w-4 h-4" />
-          Salir
         </Link>
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/"
+            className="text-slate-400 hover:text-slate-200 font-display font-semibold text-xs transition-all"
+          >
+            Inicio
+          </Link>
+          <Link 
+            href="/login"
+            className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <LogOut className="w-4 h-4" />
+            Salir
+          </Link>
+        </div>
       </header>
 
       {/* Main Body */}

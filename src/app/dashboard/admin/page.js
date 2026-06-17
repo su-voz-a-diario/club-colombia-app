@@ -96,6 +96,7 @@ export default function AdminDashboard() {
   // Enviar mensaje masivo
   const handleSendNotification = (e) => {
     e.preventDefault();
+    localStorage.setItem("adminNotice", notificationText);
     setNotificationStatus(true);
     setTimeout(() => {
       setNotificationStatus(false);
@@ -107,19 +108,27 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#07090e] flex flex-col">
       {/* Header */}
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
           <ShieldCheck className="w-6 h-6 text-[#10b981]" />
           <span className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
             Admin Consola <span className="text-[#10b981]">Club Colombia</span>
           </span>
-        </div>
-        <Link 
-          href="/login"
-          className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs flex items-center gap-1.5 transition-all"
-        >
-          <LogOut className="w-4 h-4" />
-          Salir
         </Link>
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/"
+            className="text-slate-400 hover:text-slate-200 font-display font-semibold text-xs transition-all"
+          >
+            Inicio
+          </Link>
+          <Link 
+            href="/login"
+            className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <LogOut className="w-4 h-4" />
+            Salir
+          </Link>
+        </div>
       </header>
 
       {/* Main Body */}

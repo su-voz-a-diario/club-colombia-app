@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, UserCheck, Users, Dumbbell, ArrowRight, UserPlus, LogIn, Calendar, QrCode, Sparkles } from "lucide-react";
+import Link from "next/link";
 import PaymentSimulator from "@/components/PaymentSimulator";
 import QRGenerator from "@/components/QRGenerator";
 
@@ -17,6 +18,17 @@ export default function Login() {
   const [studentName, setStudentName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [studentCategory, setStudentCategory] = useState(null);
+
+  // Leer query params al cargar
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab === "register") {
+        setActiveTab("register");
+      }
+    }
+  }, []);
 
   // Calcular categoría recomendada
   const handleBirthDateChange = (e) => {
@@ -62,13 +74,16 @@ export default function Login() {
       <div className="w-full max-w-md mx-auto z-10">
         {/* Logo */}
         <div className="flex flex-col items-center justify-center mb-8">
-          <div className="flex items-center gap-2 mb-2">
+          <Link href="/" className="flex items-center gap-2 mb-2 hover:opacity-80 transition-all">
             <ShieldCheck className="w-8 h-8 text-[#10b981]" />
             <span className="font-display font-black text-xl tracking-wider uppercase">
               Club <span className="text-[#10b981]">Colombia</span>
             </span>
-          </div>
+          </Link>
           <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Plataforma de Gestión Integrada</p>
+          <Link href="/" className="text-[10px] text-slate-400 hover:text-[#10b981] mt-2 underline transition-all font-semibold">
+            ← Volver a Inicio
+          </Link>
         </div>
 
         {/* Tabs */}

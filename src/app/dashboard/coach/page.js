@@ -77,9 +77,17 @@ export default function CoachDashboard() {
             <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-wider">Director Técnico Sub-10</p>
           </div>
         </div>
-        <Link href="/login" className="text-slate-500 hover:text-slate-300">
-          <LogOut className="w-4.5 h-4.5" />
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link 
+            href="/"
+            className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs transition-all"
+          >
+            Inicio
+          </Link>
+          <Link href="/login" className="text-slate-500 hover:text-slate-300">
+            <LogOut className="w-4.5 h-4.5" />
+          </Link>
+        </div>
       </header>
 
       {/* Selector de módulos en cabecera */}
