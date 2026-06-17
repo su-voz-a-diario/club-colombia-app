@@ -1,0 +1,487 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles } from "lucide-react";
+
+export default function AdminDashboard() {
+  // Datos simulados en estado
+  const [students, setStudents] = useState([
+    { id: 1, name: "Juan Andrés García", age: 9, category: "Sub-10 Competitivo", assignment: "automatic", status: "active", dueDays: 0 },
+    { id: 2, name: "Mateo Ospina Díaz", age: 11, category: "Sub-12 Elite", assignment: "automatic", status: "active", dueDays: 2 },
+    { id: 3, name: "Sebastián Bedoya", age: 10, category: "Sub-10 Competitivo", assignment: "manual", status: "active", dueDays: 0, overrideReason: "Promovido por alto nivel técnico" },
+    { id: 4, name: "Santiago Valencia", age: 12, category: "Sub-12 Elite", assignment: "automatic", status: "suspended", dueDays: 7 }, // Mora > 5 días hábiles
+    { id: 5, name: "Nicolás Restrepo", age: 7, category: "Sub-8 Iniciación", assignment: "automatic", status: "active", dueDays: 0 },
+    { id: 6, name: "Alejandro Londoño", age: 14, category: "Sub-15 Avanzado", assignment: "automatic", status: "suspended", dueDays: 6 } // Mora > 5 días hábiles
+  ]);
+
+  const [activeTab, setActiveTab] = useState("students"); // 'students' | 'billing' | 'schedules' | 'notifications'
+  
+  // Estados para override
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [newCategory, setNewCategory] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+
+  // Estado para envío de notificación
+  const [notificationText, setNotificationText] = useState("");
+  const [notificationStatus, setNotificationStatus] = useState(false);
+
+  // Cargar estudiantes registrados por el simulador si existen
+  useEffect(() => {
+    const simName = localStorage.getItem("simulatedStudentName");
+    const simCat = localStorage.getItem("simulatedCategory");
+    const simStatus = localStorage.getItem("simulatedStatus");
+    if (simName && simCat) {
+      setStudents(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          name: simName,
+          age: 9,
+          category: simCat,
+          assignment: "automatic",
+          status: simStatus || "active",
+          dueDays: 0
+        }
+      ]);
+      // Limpiar para que no se duplique en recargas consecutivas a menos que se desee
+    }
+  }, []);
+
+  // Simular la reconciliación o envío de alertas de mora
+  const [sendingAlerts, setSendingAlerts] = useState(false);
+  const [alertSuccess, setAlertSuccess] = useState(false);
+
+  const triggerMoraAlerts = () => {
+    setSendingAlerts(true);
+    setTimeout(() => {
+      setSendingAlerts(false);
+      setAlertSuccess(true);
+      setTimeout(() => setAlertSuccess(false), 3000);
+    }, 1500);
+  };
+
+  // Confirmar pago manual para levantar suspensión
+  const confirmManualPayment = (id) => {
+    setStudents(prev => prev.map(s => {
+      if (s.id === id) {
+        return { ...s, status: "active", dueDays: 0 };
+      }
+      return s;
+    }));
+  };
+
+  // Aplicar override manual de categoría
+  const handleApplyOverride = (e) => {
+    e.preventDefault();
+    if (!selectedStudent) return;
+
+    setStudents(prev => prev.map(s => {
+      if (s.id === selectedStudent.id) {
+        return {
+          ...s,
+          category: newCategory,
+          assignment: "manual",
+          overrideReason: overrideReason || "Ajuste manual del cuerpo técnico"
+        };
+      }
+      return s;
+    }));
+
+    setSelectedStudent(null);
+    setNewCategory("");
+    setOverrideReason("");
+  };
+
+  // Enviar mensaje masivo
+  const handleSendNotification = (e) => {
+    e.preventDefault();
+    setNotificationStatus(true);
+    setTimeout(() => {
+      setNotificationStatus(false);
+      setNotificationText("");
+    }, 3000);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#07090e] flex flex-col">
+      {/* Header */}
+      <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-2.5">
+          <ShieldCheck className="w-6 h-6 text-[#10b981]" />
+          <span className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+            Admin Consola <span className="text-[#10b981]">Club Colombia</span>
+          </span>
+        </div>
+        <Link 
+          href="/login"
+          className="text-slate-400 hover:text-[#10b981] font-display font-semibold text-xs flex items-center gap-1.5 transition-all"
+        >
+          <LogOut className="w-4 h-4" />
+          Salir
+        </Link>
+      </header>
+
+      {/* Main Body */}
+      <div className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* Left Column: KPI Stats */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-5 space-y-4">
+            <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black">Métricas Clave</h3>
+            
+            <div className="space-y-3">
+              {/* Stat 1 */}
+              <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl">
+                <span className="text-[9px] text-slate-400 font-bold uppercase block">Alumnos Activos</span>
+                <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
+                  <Users className="w-4 h-4 text-[#10b981]" />
+                  {students.filter(s => s.status === "active").length} / {students.length}
+                </span>
+              </div>
+
+              {/* Stat 2 */}
+              <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl">
+                <span className="text-[9px] text-slate-400 font-bold uppercase block">MRR Estimado (Mensual)</span>
+                <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  $760,000 COP
+                </span>
+              </div>
+
+              {/* Stat 3 */}
+              <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl">
+                <span className="text-[9px] text-slate-400 font-bold uppercase block">Tasa de Morosidad</span>
+                <span className="text-xl font-display font-black text-amber-500 flex items-center gap-1.5 mt-0.5 animate-pulse">
+                  <AlertTriangle className="w-4 h-4" />
+                  {((students.filter(s => s.status === "suspended").length / students.length) * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Menú de Navegación de Tablas */}
+          <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-2.5 flex flex-col gap-1">
+            <button
+              onClick={() => setActiveTab("students")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "students" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Control de Alumnos & Overrides
+            </button>
+            <button
+              onClick={() => setActiveTab("billing")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "billing" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Mora y Reconciliación MP
+            </button>
+            <button
+              onClick={() => setActiveTab("schedules")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "schedules" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Cronograma & Canchas
+            </button>
+            <button
+              onClick={() => setActiveTab("notifications")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "notifications" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Notificaciones Omnicanal
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Tab View Content */}
+        <div className="lg:col-span-3">
+          
+          {/* TAB 1: CONTROL DE ALUMNOS & OVERRIDES */}
+          {activeTab === "students" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              <div>
+                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Expediente General de Alumnos</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Gestión de deportistas activos y anulación manual de reglas de edad (Manual Override).</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="pb-3">Nombre</th>
+                      <th className="pb-3">Edad</th>
+                      <th className="pb-3">Categoría</th>
+                      <th className="pb-3">Asignación</th>
+                      <th className="pb-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {students.map((student) => (
+                      <tr key={student.id} className="text-xs">
+                        <td className="py-3.5 font-bold text-slate-300">{student.name}</td>
+                        <td className="py-3.5 text-slate-400">{student.age} años</td>
+                        <td className="py-3.5 text-slate-400">
+                          <span className="bg-[#07090e] px-2.5 py-1 rounded-md border border-slate-800 text-[10px]">
+                            {student.category}
+                          </span>
+                        </td>
+                        <td className="py-3.5">
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            student.assignment === "automatic"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-amber-500/10 text-amber-500"
+                          }`}>
+                            {student.assignment === "automatic" ? "Automática" : "Override Manual"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 text-right">
+                          <button
+                            onClick={() => setSelectedStudent(student)}
+                            className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                          >
+                            Override
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MODAL / FORM DE OVERRIDE MANUAL */}
+              {selectedStudent && (
+                <div className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in mt-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 text-amber-500">
+                      <Sparkles className="w-4 h-4" />
+                      <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría (Override): {selectedStudent.name}</h3>
+                    </div>
+                    <button
+                      onClick={() => setSelectedStudent(null)}
+                      className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleApplyOverride} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[8px] text-slate-400 font-bold block mb-1">SELECCIONAR NUEVA CATEGORÍA</label>
+                      <select
+                        required
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      >
+                        <option value="">-- Seleccionar --</option>
+                        <option value="Sub-8 Iniciación">Sub-8 Iniciación</option>
+                        <option value="Sub-10 Competitivo">Sub-10 Competitivo</option>
+                        <option value="Sub-12 Elite">Sub-12 Elite</option>
+                        <option value="Sub-15 Avanzado">Sub-15 Avanzado</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[8px] text-slate-400 font-bold block mb-1">JUSTIFICACIÓN TÉCNICA DEL CAMBIO</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Nivel superior, fuerza física o solicitud de familia"
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 flex justify-end">
+                      <button
+                        type="submit"
+                        className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer"
+                      >
+                        Guardar Excepción
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: MORA Y RECONCILIACIÓN MP */}
+          {activeTab === "billing" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Control de Mora y Recaudos</h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Control de suspensiones automáticas de QR al expirar el período de gracia (5 días hábiles).</p>
+                </div>
+                
+                <button
+                  onClick={triggerMoraAlerts}
+                  disabled={sendingAlerts}
+                  className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 cursor-pointer"
+                >
+                  {sendingAlerts ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Auditar Mora & Enviar Avisos
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {alertSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Auditoría completada. Las credenciales de alumnos morosos han sido suspendidas y las alertas de cobro por WhatsApp fueron enviadas.</span>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {students.map((student) => (
+                  <div key={student.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-200 text-xs">{student.name}</span>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                          student.status === "active"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-red-500/10 text-red-400 animate-pulse"
+                        }`}>
+                          {student.status === "active" ? "Activo (Al día)" : "QR Suspendido"}
+                        </span>
+                      </div>
+                      
+                      <div className="text-[10px] text-slate-500 mt-1 space-x-3">
+                        <span>Categoría: {student.category}</span>
+                        {student.dueDays > 0 && (
+                          <span className="text-amber-500 font-semibold">{student.dueDays} días de retraso</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      {student.status === "suspended" ? (
+                        <>
+                          <button
+                            onClick={() => confirmManualPayment(student.id)}
+                            className="w-full sm:w-auto bg-slate-900 border border-slate-800 text-[#10b981] hover:bg-emerald-500 hover:text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+                          >
+                            Registrar Recaudo Manual
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-mono">Pago Al Día</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CRONOGRAMA & CANCHAS */}
+          {activeTab === "schedules" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              <div>
+                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Cronograma Deportivo Semanal</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Asignación de canchas, categorías y entrenadores por día.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
+                  <h3 className="font-display font-bold text-xs uppercase tracking-wider text-[#10b981] mb-3 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Lunes & Miércoles
+                  </h3>
+                  <div className="space-y-3 text-xs text-slate-400">
+                    <div className="border-b border-slate-900 pb-2">
+                      <span className="font-bold text-slate-200 block">Sub-8 Iniciación</span>
+                      <span className="text-[10px] block mt-0.5">Horario: 3:30 PM - 5:00 PM | Cancha 1</span>
+                      <span className="text-[9px] text-slate-500 block">Profesor: Mario Silva</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-200 block">Sub-12 Elite</span>
+                      <span className="text-[10px] block mt-0.5">Horario: 4:00 PM - 6:00 PM | Cancha 2</span>
+                      <span className="text-[9px] text-slate-500 block">Profesor: Carlos Valderrama</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
+                  <h3 className="font-display font-bold text-xs uppercase tracking-wider text-[#10b981] mb-3 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Martes & Jueves
+                  </h3>
+                  <div className="space-y-3 text-xs text-slate-400">
+                    <div className="border-b border-slate-900 pb-2">
+                      <span className="font-bold text-slate-200 block">Sub-10 Competitivo</span>
+                      <span className="text-[10px] block mt-0.5">Horario: 4:00 PM - 6:00 PM | Cancha 1</span>
+                      <span className="text-[9px] text-slate-500 block">Profesor: Mario Silva</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-200 block">Sub-15 Avanzado</span>
+                      <span className="text-[10px] block mt-0.5">Horario: 5:00 PM - 7:00 PM | Cancha Principal</span>
+                      <span className="text-[9px] text-slate-500 block">Profesor: Carlos Valderrama</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: NOTIFICACIONES OMNICANAL */}
+          {activeTab === "notifications" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              <div>
+                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Canal de Comunicados de Urgencia</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Envía notificaciones simultáneas por WhatsApp (Twilio), Correo Electrónico (Resend) y Web Push.</p>
+              </div>
+
+              {notificationStatus && (
+                <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Comunicado enviado exitosamente a todos los padres de familia del club.</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSendNotification} className="space-y-4">
+                <div>
+                  <label className="text-[8px] text-slate-400 font-bold block mb-1">MENSAJE A TRANSMITIR</label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Ej. Atención padres de familia: Debido a fuertes lluvias torrenciales en el complejo deportivo, los entrenamientos de la tarde quedan cancelados por seguridad de los atletas."
+                    value={notificationText}
+                    onChange={(e) => setNotificationText(e.target.value)}
+                    className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3.5 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-green resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Enviar Comunicado Masivo
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
