@@ -5,6 +5,14 @@ import Link from "next/link";
 import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles } from "lucide-react";
 
 export default function AdminDashboard() {
+  const formatCurrency = (val) => {
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+      maximumFractionDigits: 0
+    }).format(val);
+  };
+
   // Datos simulados en estado
   const [students, setStudents] = useState([
     { id: 1, name: "Juan Andrés García", age: 9, category: "Sub-10 Competitivo", assignment: "automatic", status: "active", dueDays: 0 },
@@ -33,6 +41,7 @@ export default function AdminDashboard() {
   const [manualParentName, setManualParentName] = useState("");
   const [manualParentPhone, setManualParentPhone] = useState("");
   const [manualPaidCash, setManualPaidCash] = useState(false);
+  const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
   // Cargar estudiantes registrados por el simulador si existen, y configurar consulta en intervalos
   const [pendingPayments, setPendingPayments] = useState([]);
@@ -114,7 +123,7 @@ export default function AdminDashboard() {
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
-  const approvePendingPayment = (paymentId, studentId = 1) => {
+  const approvePendingPayment = (paymentId, studentNameFromPayment) => {
     // 1. Marcar el pago como aprobado en localStorage
     const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
     const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "approved" } : p);
@@ -122,11 +131,12 @@ export default function AdminDashboard() {
     setPendingPayments(updatedPending.filter(p => p.status === "pending"));
 
     // 2. Reactivar al alumno en la lista local y localStorage
-    if (studentId === 1) {
+    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
+    if (studentNameFromPayment === simName || studentNameFromPayment === "Juan Andrés García") {
       localStorage.setItem("simulatedStatus", "active");
     }
     setStudents(prev => prev.map(s => {
-      if (s.id === studentId) {
+      if (s.name === studentNameFromPayment) {
         return { ...s, status: "active", dueDays: 0 };
       }
       return s;
@@ -134,7 +144,7 @@ export default function AdminDashboard() {
   };
 
   // Poner una solicitud de pago en espera
-  const holdPendingPayment = (paymentId, studentId = 1) => {
+  const holdPendingPayment = (paymentId, studentNameFromPayment) => {
     // 1. Marcar el pago como en espera en localStorage
     const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
     const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "on_hold" } : p);
@@ -142,18 +152,19 @@ export default function AdminDashboard() {
     setPendingPayments(updatedPending.filter(p => p.status === "pending"));
 
     // 2. Cambiar estado del alumno a en espera
-    if (studentId === 1) {
+    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
+    if (studentNameFromPayment === simName || studentNameFromPayment === "Juan Andrés García") {
       localStorage.setItem("simulatedStatus", "on_hold");
     }
     setStudents(prev => prev.map(s => {
-      if (s.id === studentId) {
+      if (s.name === studentNameFromPayment) {
         return { ...s, status: "on_hold" };
       }
       return s;
     }));
   };
 
-  // Registrar un alumno de forma manual
+    // Registrar un alumno de forma manual
   const handleManualRegister = (e) => {
     e.preventDefault();
     if (!manualStudentName || !manualStudentAge) return;
@@ -187,12 +198,29 @@ export default function AdminDashboard() {
     localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
     localStorage.setItem("simulatedParentName", manualParentName);
 
+    // Si pagó en efectivo/transferencia directa, registrar en el historial de pagos
+    if (manualPaidCash) {
+      const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+      const cashPayment = {
+        id: Date.now() + 1,
+        studentName: manualStudentName,
+        categoryName: category,
+        amount: manualPaymentConcept === "monthly" ? 300 : 50,
+        paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
+        date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+        status: "approved"
+      };
+      pendingList.push(cashPayment);
+      localStorage.setItem("pendingPayments", JSON.stringify(pendingList));
+    }
+
     // Resetear form
     setManualStudentName("");
     setManualStudentAge("");
     setManualParentName("");
     setManualParentPhone("");
     setManualPaidCash(false);
+    setManualPaymentConcept("monthly");
     setShowAddForm(false);
   };
 
@@ -279,7 +307,7 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">MRR Estimado (Mensual)</span>
                 <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
                   <DollarSign className="w-4 h-4 text-emerald-400" />
-                  $760,000 COP
+                  {formatCurrency(students.filter(s => s.status === "active").length * 300)}
                 </span>
               </div>
 
@@ -310,7 +338,7 @@ export default function AdminDashboard() {
                 activeTab === "billing" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
               }`}
             >
-              Mora y Reconciliación MP
+              Mora y Validaciones
             </button>
             <button
               onClick={() => setActiveTab("schedules")}
@@ -413,17 +441,49 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Toggle Pago en Efectivo */}
-                  <div className="flex items-center gap-3 bg-[#0e121e]/80 p-3.5 rounded-xl border border-slate-800/80">
-                    <input
-                      type="checkbox"
-                      id="manualPaidCash"
-                      checked={manualPaidCash}
-                      onChange={(e) => setManualPaidCash(e.target.checked)}
-                      className="w-4.5 h-4.5 accent-[#10b981] rounded cursor-pointer animate-pulse"
-                    />
-                    <label htmlFor="manualPaidCash" className="text-xs text-slate-300 font-semibold cursor-pointer">
-                      💵 Registrar pago inicial recibido (Efectivo / Cuenta Banorte Luis Alberto García)
-                    </label>
+                  <div className="flex flex-col gap-3 bg-[#0e121e]/80 p-3.5 rounded-xl border border-slate-800/80">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="manualPaidCash"
+                        checked={manualPaidCash}
+                        onChange={(e) => setManualPaidCash(e.target.checked)}
+                        className="w-4.5 h-4.5 accent-[#10b981] rounded cursor-pointer animate-pulse"
+                      />
+                      <label htmlFor="manualPaidCash" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                        💵 Registrar pago inicial recibido (Efectivo / Transferencia Directa)
+                      </label>
+                    </div>
+
+                    {manualPaidCash && (
+                      <div className="pl-7.5 animate-fade-in space-y-2">
+                        <label className="text-[8px] text-slate-400 font-bold block uppercase">Concepto de Pago Inicial Recibido</label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setManualPaymentConcept("monthly")}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                              manualPaymentConcept === "monthly"
+                                ? "bg-slate-800 text-[#10b981] border border-slate-700/50"
+                                : "bg-[#07090e] text-slate-400 border border-slate-800"
+                            }`}
+                          >
+                            Mensualidad ($300 MXN)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setManualPaymentConcept("class")}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                              manualPaymentConcept === "class"
+                                ? "bg-slate-800 text-sky-400 border border-slate-700/50"
+                                : "bg-[#07090e] text-slate-400 border border-slate-800"
+                            }`}
+                          >
+                            Por Clase ($50 MXN)
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-2.5 pt-1">
@@ -600,19 +660,19 @@ export default function AdminDashboard() {
                           <div className="text-xs font-bold text-slate-200">{payment.studentName}</div>
                           <div className="text-[10px] text-slate-500 flex gap-3">
                             <span>Categoría: {payment.categoryName}</span>
-                            <span className="text-red-400 font-bold">Monto: ${payment.amount.toLocaleString("es-MX")} MXN</span>
+                            <span className="text-red-400 font-bold">Monto: ${payment.amount.toLocaleString("es-MX")} MXN ({payment.paymentType || "Mensualidad"})</span>
                           </div>
                           <div className="text-[9px] text-slate-600 font-mono">Reportado: {payment.date}</div>
                         </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button
-                            onClick={() => approvePendingPayment(payment.id, 1)}
+                            onClick={() => approvePendingPayment(payment.id, payment.studentName)}
                             className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
                           >
                             OK (Aprobar)
                           </button>
                           <button
-                            onClick={() => holdPendingPayment(payment.id, 1)}
+                            onClick={() => holdPendingPayment(payment.id, payment.studentName)}
                             className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
                           >
                             En Espera
@@ -672,7 +732,7 @@ export default function AdminDashboard() {
                             onClick={() => {
                               const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
                               if (firstPending) {
-                                approvePendingPayment(firstPending.id, student.id);
+                                approvePendingPayment(firstPending.id, student.name);
                               } else {
                                 confirmManualPayment(student.id);
                               }
@@ -685,7 +745,7 @@ export default function AdminDashboard() {
                             onClick={() => {
                               const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
                               if (firstPending) {
-                                holdPendingPayment(firstPending.id, student.id);
+                                holdPendingPayment(firstPending.id, student.name);
                               } else {
                                 localStorage.setItem("simulatedStatus", "on_hold");
                                 setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: "on_hold" } : s));

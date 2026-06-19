@@ -12,6 +12,7 @@ export default function ParentDashboard() {
   const [categoryName, setCategoryName] = useState("Sub-10 Competitivo");
   const [studentStatus, setStudentStatus] = useState("suspended"); // Inicialmente suspendido para mostrar el flujo de reactivación por mora
   const [activeTab, setActiveTab] = useState("performance"); // 'performance' | 'billing' | 'gallery'
+  const [myPayments, setMyPayments] = useState([]);
 
   // Métricas del deportista (leídas de localStorage si el entrenador las actualizó)
   const [metrics, setMetrics] = useState({
@@ -30,10 +31,10 @@ export default function ParentDashboard() {
   // Leer posibles estados simulados al cargar y de forma periódica para la demo
   useEffect(() => {
     const updateStates = () => {
-      const simName = localStorage.getItem("simulatedStudentName");
+      const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
       const simCat = localStorage.getItem("simulatedCategory");
       const simStatus = localStorage.getItem("simulatedStatus");
-      if (simName) setStudentName(simName);
+      setStudentName(simName);
       if (simCat) setCategoryName(simCat);
       if (simStatus) setStudentStatus(simStatus);
 
@@ -42,6 +43,10 @@ export default function ParentDashboard() {
       const simNotes = localStorage.getItem("simulatedNotes");
       if (simMetrics) setMetrics(JSON.parse(simMetrics));
       if (simNotes) setCoachNotes(simNotes);
+
+      // Cargar mis pagos reportados
+      const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+      setMyPayments(pending.filter(p => p.studentName === simName));
     };
 
     updateStates();
@@ -51,7 +56,7 @@ export default function ParentDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = (amount, paymentLabel) => {
     setStudentStatus("pending_validation");
     localStorage.setItem("simulatedStatus", "pending_validation");
 
@@ -61,7 +66,8 @@ export default function ParentDashboard() {
       id: Date.now(),
       studentName: studentName,
       categoryName: categoryName,
-      amount: 120000,
+      amount: amount,
+      paymentType: paymentLabel,
       date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
       status: "pending"
     };
@@ -123,7 +129,7 @@ export default function ParentDashboard() {
                 </p>
               </div>
               <PaymentSimulator 
-                amount={120000} 
+                amount={300} 
                 onPaymentSuccess={handlePaymentSuccess} 
               />
             </div>
@@ -155,7 +161,7 @@ export default function ParentDashboard() {
                 </p>
               </div>
               <PaymentSimulator 
-                amount={120000} 
+                amount={300} 
                 onPaymentSuccess={handlePaymentSuccess} 
               />
             </div>
@@ -230,18 +236,44 @@ export default function ParentDashboard() {
 
           {/* TAB 2: ESTADO DE CUENTA & PAGOS */}
           {activeTab === "billing" && (
-            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4 font-sans">
               <div>
                 <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Estado de Facturación</h2>
                 <p className="text-[10px] text-slate-500 mt-0.5">Control de matrículas y mensualidades del deportista.</p>
               </div>
 
               <div className="space-y-3">
+                {/* Pagos Reportados Dinámicos (localStorage) */}
+                {myPayments.map((payment) => (
+                  <div key={payment.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center animate-pulse-subtle">
+                    <div>
+                      <span className="font-bold text-xs text-slate-200 block">{payment.paymentType} (${payment.amount} MXN)</span>
+                      <span className="text-[9px] text-slate-500 block mt-0.5">Reportado el: {payment.date} | Transferencia Directa</span>
+                    </div>
+                    {payment.status === "approved" ? (
+                       <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
+                         <CheckCircle2 className="w-3.5 h-3.5" />
+                         Validado
+                       </div>
+                    ) : payment.status === "on_hold" ? (
+                       <div className="flex items-center gap-1.5 text-amber-500 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
+                         <Clock className="w-3.5 h-3.5 animate-spin-slow" />
+                         En Espera
+                       </div>
+                    ) : (
+                       <div className="flex items-center gap-1.5 text-red-500 bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase animate-pulse">
+                         <Clock className="w-3.5 h-3.5" />
+                         Por Validar
+                       </div>
+                    )}
+                  </div>
+                ))}
+
                 {/* Pago 1 */}
                 <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
                   <div>
-                    <span className="font-bold text-xs text-slate-200 block">Mensualidad Junio 2026</span>
-                    <span className="text-[9px] text-slate-500 block mt-0.5">Vence: 05-Jun-2026 | Suscripción Recurrente</span>
+                    <span className="font-bold text-xs text-slate-200 block">Mensualidad Junio 2026 ($300 MXN)</span>
+                    <span className="text-[9px] text-slate-500 block mt-0.5">Vence: 05-Jun-2026 | Plan Mensual</span>
                   </div>
                   {studentStatus === "active" ? (
                     <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
@@ -255,10 +287,22 @@ export default function ParentDashboard() {
                   )}
                 </div>
 
+                {/* Clase Individual */}
+                <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
+                  <div>
+                    <span className="font-bold text-xs text-slate-200 block">Clase de Entrenamiento ($50 MXN)</span>
+                    <span className="text-[9px] text-slate-500 block mt-0.5">Entrenamiento: 20-May-2026 | Pago Único por Clase</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Pagado
+                  </div>
+                </div>
+
                 {/* Pago 2 */}
                 <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
                   <div>
-                    <span className="font-bold text-xs text-slate-200 block">Matrícula & Seguro Médico Anual</span>
+                    <span className="font-bold text-xs text-slate-200 block">Inscripción General Anual ($300 MXN)</span>
                     <span className="text-[9px] text-slate-500 block mt-0.5">Cobrado el: 10-Ene-2026 | Pago Único</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">

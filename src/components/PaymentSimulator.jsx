@@ -3,16 +3,20 @@
 import React, { useState } from "react";
 import { Check, ShieldCheck, Copy } from "lucide-react";
 
-export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) {
+export default function PaymentSimulator({ amount: initialAmount = 300, onPaymentSuccess }) {
   const [copiedText, setCopiedText] = useState(false);
   const [notified, setNotified] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [paymentType, setPaymentType] = useState(initialAmount === 50 ? "class" : "monthly");
 
   const bankDetails = {
     banco: "Banorte",
     beneficiario: "Luis Alberto García",
     cuenta: "4189 1433 3272 1003",
   };
+
+  const amount = paymentType === "monthly" ? 300 : 50;
+  const paymentLabel = paymentType === "monthly" ? "Mensualidad Completa" : "Clase Individual";
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -28,7 +32,7 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
       setLoading(false);
       setNotified(true);
       if (onPaymentSuccess) {
-        onPaymentSuccess();
+        onPaymentSuccess(amount, paymentLabel);
       }
     }, 1200);
   };
@@ -67,8 +71,37 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
       ) : (
         <div className="space-y-4">
           <div className="text-center bg-[#07090e] border border-slate-800 p-3.5 rounded-2xl">
-            <span className="text-[9px] text-slate-500 font-bold tracking-wider uppercase block">Mensualidad</span>
-            <span className="text-xl font-display font-black text-slate-100 mt-0.5 block">{formatCurrency(amount)}</span>
+            <span className="text-[9px] text-slate-500 font-bold tracking-wider uppercase block mb-2">Selecciona Concepto de Pago</span>
+            
+            {/* Selector de Concepto */}
+            <div className="flex bg-[#0e121e] border border-slate-800 rounded-xl p-1 mb-3">
+              <button
+                type="button"
+                onClick={() => setPaymentType("monthly")}
+                className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all cursor-pointer ${
+                  paymentType === "monthly" 
+                    ? "bg-slate-800 text-[#10b981] border border-slate-700/50" 
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Mensualidad ($300)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentType("class")}
+                className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-lg transition-all cursor-pointer ${
+                  paymentType === "class" 
+                    ? "bg-slate-800 text-sky-400 border border-slate-700/50" 
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Por Clase ($50)
+              </button>
+            </div>
+
+            <span className="text-[9px] text-slate-500 font-bold tracking-wider uppercase block">Total a Transferir</span>
+            <span className="text-xl font-display font-black text-[#10b981] mt-0.5 block">{formatCurrency(amount)} MXN</span>
+            <span className="text-[9px] text-slate-400 mt-1 block">Concepto: <strong className="text-slate-200">{paymentLabel}</strong></span>
           </div>
 
           <div className="bg-[#07090e] border border-slate-800/80 p-3.5 rounded-2xl space-y-2.5 text-left text-xs">
