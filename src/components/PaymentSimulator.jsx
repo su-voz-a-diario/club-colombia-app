@@ -9,9 +9,9 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
   const [loading, setLoading] = useState(false);
 
   const bankDetails = {
-    banco: "BBVA Bancomer",
-    beneficiario: "Escuela de Fútbol Club Colombia",
-    clabe: "0121 8000 1234 5678 90",
+    banco: "Banorte",
+    beneficiario: "Luis Alberto García",
+    cuenta: "4189 1433 3272 1003",
   };
 
   const copyToClipboard = (text) => {
@@ -85,13 +85,13 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
               </div>
               <div className="flex justify-between items-center">
                 <div>
-                  <span className="text-[9px] text-slate-500 block">CLABE Interbancaria:</span>
-                  <span className="text-slate-200 font-mono font-bold text-[11px] block">{bankDetails.clabe}</span>
+                  <span className="text-[9px] text-slate-500 block">Tarjeta / Cuenta:</span>
+                  <span className="text-slate-200 font-mono font-bold text-[11px] block">{bankDetails.cuenta}</span>
                 </div>
                 <button
-                  onClick={() => copyToClipboard(bankDetails.clabe)}
+                  onClick={() => copyToClipboard(bankDetails.cuenta)}
                   className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition-all cursor-pointer"
-                  title="Copiar CLABE"
+                  title="Copiar Tarjeta"
                 >
                   {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>

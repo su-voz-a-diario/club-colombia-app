@@ -26,6 +26,14 @@ export default function AdminDashboard() {
   const [notificationText, setNotificationText] = useState("");
   const [notificationStatus, setNotificationStatus] = useState(false);
 
+  // Estados para el formulario de inscripción manual
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [manualStudentName, setManualStudentName] = useState("");
+  const [manualStudentAge, setManualStudentAge] = useState("");
+  const [manualParentName, setManualParentName] = useState("");
+  const [manualParentPhone, setManualParentPhone] = useState("");
+  const [manualPaidCash, setManualPaidCash] = useState(false);
+
   // Cargar estudiantes registrados por el simulador si existen, y configurar consulta en intervalos
   const [pendingPayments, setPendingPayments] = useState([]);
 
@@ -143,6 +151,49 @@ export default function AdminDashboard() {
       }
       return s;
     }));
+  };
+
+  // Registrar un alumno de forma manual
+  const handleManualRegister = (e) => {
+    e.preventDefault();
+    if (!manualStudentName || !manualStudentAge) return;
+
+    const ageNum = Number(manualStudentAge);
+    let category = "Sub-8 Iniciación";
+    if (ageNum > 8 && ageNum <= 10) {
+      category = "Sub-10 Competitivo";
+    } else if (ageNum > 10 && ageNum <= 12) {
+      category = "Sub-12 Elite";
+    } else if (ageNum > 12) {
+      category = "Sub-15 Avanzado";
+    }
+
+    const newStudent = {
+      id: Date.now(),
+      name: manualStudentName,
+      age: ageNum,
+      category: category,
+      assignment: "automatic",
+      status: manualPaidCash ? "active" : "suspended",
+      dueDays: manualPaidCash ? 0 : 7
+    };
+
+    // Agregar al estado local
+    setStudents(prev => [...prev, newStudent]);
+
+    // Guardar en localStorage para pruebas de portal de acudientes
+    localStorage.setItem("simulatedStudentName", manualStudentName);
+    localStorage.setItem("simulatedCategory", category);
+    localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
+    localStorage.setItem("simulatedParentName", manualParentName);
+
+    // Resetear form
+    setManualStudentName("");
+    setManualStudentAge("");
+    setManualParentName("");
+    setManualParentPhone("");
+    setManualPaidCash(false);
+    setShowAddForm(false);
   };
 
   // Aplicar override manual de categoría
@@ -286,10 +337,112 @@ export default function AdminDashboard() {
           {/* TAB 1: CONTROL DE ALUMNOS & OVERRIDES */}
           {activeTab === "students" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
-              <div>
-                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Expediente General de Alumnos</h2>
-                <p className="text-[10px] text-slate-500 mt-0.5">Gestión de deportistas activos y anulación manual de reglas de edad (Manual Override).</p>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Expediente General de Alumnos</h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Gestión de deportistas activos y anulación manual de reglas de edad (Manual Override).</p>
+                </div>
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 uppercase tracking-wider font-sans shrink-0"
+                >
+                  {showAddForm ? "Cerrar Registro" : "+ Inscribir Alumno Manual"}
+                </button>
               </div>
+
+              {/* Formulario de Registro Manual */}
+              {showAddForm && (
+                <form onSubmit={handleManualRegister} className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in space-y-4 font-sans text-left">
+                  <div className="flex items-center gap-1.5 text-[#10b981] font-display font-bold text-xs uppercase tracking-wider">
+                    <Users className="w-4 h-4" />
+                    Inscripción Manual de Alumno (Pago en Efectivo / Cuenta)
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Alumno */}
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">NOMBRE COMPLETO DEL ALUMNO</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Carlos López Jr."
+                        value={manualStudentName}
+                        onChange={(e) => setManualStudentName(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">EDAD DEL ALUMNO (AÑOS)</label>
+                      <input
+                        type="number"
+                        required
+                        min="5"
+                        max="17"
+                        placeholder="Ej. 9"
+                        value={manualStudentAge}
+                        onChange={(e) => setManualStudentAge(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+
+                    {/* Acudiente */}
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">NOMBRE DEL REPRESENTANTE (PADRE)</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. Carlos López Padre"
+                        value={manualParentName}
+                        onChange={(e) => setManualParentName(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">TELÉFONO DE CONTACTO</label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="Ej. 418 123 4567"
+                        value={manualParentPhone}
+                        onChange={(e) => setManualParentPhone(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Toggle Pago en Efectivo */}
+                  <div className="flex items-center gap-3 bg-[#0e121e]/80 p-3.5 rounded-xl border border-slate-800/80">
+                    <input
+                      type="checkbox"
+                      id="manualPaidCash"
+                      checked={manualPaidCash}
+                      onChange={(e) => setManualPaidCash(e.target.checked)}
+                      className="w-4.5 h-4.5 accent-[#10b981] rounded cursor-pointer animate-pulse"
+                    />
+                    <label htmlFor="manualPaidCash" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                      💵 Registrar pago inicial recibido (Efectivo / Cuenta Banorte Luis Alberto García)
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                    >
+                      Dar de Alta Estudiante
+                    </button>
+                  </div>
+                </form>
+              )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
