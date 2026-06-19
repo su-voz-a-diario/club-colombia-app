@@ -27,25 +27,46 @@ export default function ParentDashboard() {
   );
 
   // Leer posibles estados simulados al cargar
+  // Leer posibles estados simulados al cargar y de forma periódica para la demo
   useEffect(() => {
-    // Si fue registrado en el paso anterior
-    const simName = localStorage.getItem("simulatedStudentName");
-    const simCat = localStorage.getItem("simulatedCategory");
-    const simStatus = localStorage.getItem("simulatedStatus");
-    if (simName) setStudentName(simName);
-    if (simCat) setCategoryName(simCat);
-    if (simStatus) setStudentStatus(simStatus);
+    const updateStates = () => {
+      const simName = localStorage.getItem("simulatedStudentName");
+      const simCat = localStorage.getItem("simulatedCategory");
+      const simStatus = localStorage.getItem("simulatedStatus");
+      if (simName) setStudentName(simName);
+      if (simCat) setCategoryName(simCat);
+      if (simStatus) setStudentStatus(simStatus);
 
-    // Si el entrenador guardó calificaciones
-    const simMetrics = localStorage.getItem("simulatedMetrics");
-    const simNotes = localStorage.getItem("simulatedNotes");
-    if (simMetrics) setMetrics(JSON.parse(simMetrics));
-    if (simNotes) setCoachNotes(simNotes);
+      // Si el entrenador guardó calificaciones
+      const simMetrics = localStorage.getItem("simulatedMetrics");
+      const simNotes = localStorage.getItem("simulatedNotes");
+      if (simMetrics) setMetrics(JSON.parse(simMetrics));
+      if (simNotes) setCoachNotes(simNotes);
+    };
+
+    updateStates();
+
+    // Intervalo de consulta para simular sincronización instantánea
+    const interval = setInterval(updateStates, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   const handlePaymentSuccess = () => {
-    setStudentStatus("active");
-    localStorage.setItem("simulatedStatus", "active");
+    setStudentStatus("pending_validation");
+    localStorage.setItem("simulatedStatus", "pending_validation");
+
+    // Guardar solicitud de validación para el Administrador en localStorage
+    const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+    const newRequest = {
+      id: Date.now(),
+      studentName: studentName,
+      categoryName: categoryName,
+      amount: 120000,
+      date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+      status: "pending"
+    };
+    pendingList.push(newRequest);
+    localStorage.setItem("pendingPayments", JSON.stringify(pendingList));
   };
 
   return (
@@ -95,9 +116,9 @@ export default function ParentDashboard() {
           {/* Si está suspendido, incrustar la simulación de pago directamente debajo de la credencial */}
           {studentStatus === "suspended" && (
             <div className="w-full flex flex-col items-center gap-3 animate-pulse-subtle">
-              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl w-full text-center">
+              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl w-full text-center font-sans">
                 <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider block">Atención: Mensualidad Vencida</span>
-                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed font-normal">
                   Has superado el periodo de gracia de 5 días hábiles. Realiza tu transferencia bancaria directa (o pago en efectivo con el Profe Luis López) y repórtalo abajo para reactivar tu QR al instante.
                 </p>
               </div>
@@ -105,6 +126,19 @@ export default function ParentDashboard() {
                 amount={120000} 
                 onPaymentSuccess={handlePaymentSuccess} 
               />
+            </div>
+          )}
+
+          {/* Si está en proceso de validación */}
+          {studentStatus === "pending_validation" && (
+            <div className="w-full bg-[#0e121e] border border-slate-800 p-5 rounded-3xl text-center space-y-3.5 font-sans">
+              <div className="w-9 h-9 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-amber-400">
+                <span className="animate-spin rounded-full h-4.5 w-4.5 border-2 border-amber-400 border-t-transparent" />
+              </div>
+              <h4 className="font-display font-bold text-xs uppercase tracking-wider text-amber-500">Validación en Proceso</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
+                Reportaste tu pago. El <strong>Profe Luis López</strong> está validando el depósito en la cuenta del club. Tu credencial QR se habilitará de forma automática en cuanto confirme la validación.
+              </p>
             </div>
           )}
 

@@ -26,26 +26,51 @@ export default function AdminDashboard() {
   const [notificationText, setNotificationText] = useState("");
   const [notificationStatus, setNotificationStatus] = useState(false);
 
-  // Cargar estudiantes registrados por el simulador si existen
+  // Cargar estudiantes registrados por el simulador si existen, y configurar consulta en intervalos
+  const [pendingPayments, setPendingPayments] = useState([]);
+
   useEffect(() => {
-    const simName = localStorage.getItem("simulatedStudentName");
-    const simCat = localStorage.getItem("simulatedCategory");
-    const simStatus = localStorage.getItem("simulatedStatus");
-    if (simName && simCat) {
-      setStudents(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          name: simName,
-          age: 9,
-          category: simCat,
-          assignment: "automatic",
-          status: simStatus || "active",
-          dueDays: 0
-        }
-      ]);
-      // Limpiar para que no se duplique en recargas consecutivas a menos que se desee
-    }
+    const refreshData = () => {
+      // Leer estado simulado de Juan Andrés García (ID 1)
+      const simStatus = localStorage.getItem("simulatedStatus");
+      if (simStatus) {
+        setStudents(prev => prev.map(s => {
+          if (s.id === 1) {
+            return { ...s, status: simStatus, dueDays: simStatus === "active" ? 0 : simStatus === "pending_validation" ? 0 : 7 };
+          }
+          return s;
+        }));
+      }
+
+      // Cargar alumnos recién registrados si los hay
+      const simName = localStorage.getItem("simulatedStudentName");
+      const simCat = localStorage.getItem("simulatedCategory");
+      if (simName && simCat) {
+        setStudents(prev => {
+          if (prev.some(s => s.name === simName)) return prev;
+          return [
+            ...prev,
+            {
+              id: 100, // ID de prueba para nuevo registrado
+              name: simName,
+              age: 9,
+              category: simCat,
+              assignment: "automatic",
+              status: simStatus || "active",
+              dueDays: 0
+            }
+          ];
+        });
+      }
+
+      // Cargar lista de validaciones de pago pendientes
+      const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+      setPendingPayments(pending.filter(p => p.status === "pending"));
+    };
+
+    refreshData();
+    const interval = setInterval(refreshData, 2000);
+    return () => clearInterval(interval);
   }, []);
 
   // Simular la reconciliación o envío de alertas de mora
@@ -57,14 +82,43 @@ export default function AdminDashboard() {
     setTimeout(() => {
       setSendingAlerts(false);
       setAlertSuccess(true);
+      // Poner al alumno 1 en mora de prueba para la demo si no está pagado
+      const simStatus = localStorage.getItem("simulatedStatus");
+      if (simStatus !== "active" && simStatus !== "pending_validation") {
+        localStorage.setItem("simulatedStatus", "suspended");
+        setStudents(prev => prev.map(s => s.id === 1 ? { ...s, status: "suspended", dueDays: 7 } : s));
+      }
       setTimeout(() => setAlertSuccess(false), 3000);
     }, 1500);
   };
 
-  // Confirmar pago manual para levantar suspensión
+  // Confirmar pago manual para levantar suspensión (Directo desde lista)
   const confirmManualPayment = (id) => {
     setStudents(prev => prev.map(s => {
       if (s.id === id) {
+        return { ...s, status: "active", dueDays: 0 };
+      }
+      return s;
+    }));
+    if (id === 1) {
+      localStorage.setItem("simulatedStatus", "active");
+    }
+  };
+
+  // Confirmar y aprobar una solicitud de pago reportada
+  const approvePendingPayment = (paymentId, studentId = 1) => {
+    // 1. Marcar el pago como aprobado en localStorage
+    const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+    const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "approved" } : p);
+    localStorage.setItem("pendingPayments", JSON.stringify(updatedPending));
+    setPendingPayments(updatedPending.filter(p => p.status === "pending"));
+
+    // 2. Reactivar al alumno en la lista local y localStorage
+    if (studentId === 1) {
+      localStorage.setItem("simulatedStatus", "active");
+    }
+    setStudents(prev => prev.map(s => {
+      if (s.id === studentId) {
         return { ...s, status: "active", dueDays: 0 };
       }
       return s;
@@ -322,7 +376,7 @@ export default function AdminDashboard() {
 
           {/* TAB 2: MORA Y RECONCILIACIÓN MP */}
           {activeTab === "billing" && (
-            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4 font-sans">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Control de Mora y Recaudos</h2>
@@ -332,7 +386,7 @@ export default function AdminDashboard() {
                 <button
                   onClick={triggerMoraAlerts}
                   disabled={sendingAlerts}
-                  className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 cursor-pointer"
+                  className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 cursor-pointer font-sans"
                 >
                   {sendingAlerts ? (
                     <>
@@ -355,6 +409,40 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {/* Solicitudes de Validación de Pago Recibidas */}
+              {pendingPayments.length > 0 && (
+                <div className="bg-amber-500/5 border border-amber-500/15 p-4 rounded-2xl space-y-3 animate-pulse-subtle">
+                  <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase tracking-wider font-display">
+                    <Sparkles className="w-4 h-4 animate-spin-slow" />
+                    Solicitudes de Validación de Pago por Confirmar ({pendingPayments.length})
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Los siguientes padres han realizado transferencias directas y reportado su pago. Verifica la cuenta bancaria del club y confirma para activar su QR:
+                  </p>
+
+                  <div className="space-y-3 pt-1">
+                    {pendingPayments.map((payment) => (
+                      <div key={payment.id} className="bg-[#07090e]/80 border border-slate-800/80 p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-slate-200">{payment.studentName}</div>
+                          <div className="text-[10px] text-slate-500 flex gap-3">
+                            <span>Categoría: {payment.categoryName}</span>
+                            <span className="text-[#10b981] font-semibold">Monto: ${payment.amount.toLocaleString("es-MX")} MXN</span>
+                          </div>
+                          <div className="text-[9px] text-slate-600 font-mono">Reportado: {payment.date}</div>
+                        </div>
+                        <button
+                          onClick={() => approvePendingPayment(payment.id, 1)}
+                          className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                        >
+                          Confirmar Pago & Activar QR
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-3">
                 {students.map((student) => (
                   <div key={student.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -364,9 +452,16 @@ export default function AdminDashboard() {
                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
                           student.status === "active"
                             ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-red-500/10 text-red-400 animate-pulse"
+                            : student.status === "pending_validation"
+                              ? "bg-amber-500/10 text-amber-500 animate-pulse"
+                              : "bg-red-500/10 text-red-400 animate-pulse"
                         }`}>
-                          {student.status === "active" ? "Activo (Al día)" : "QR Suspendido"}
+                          {student.status === "active" 
+                            ? "Activo (Al día)" 
+                            : student.status === "pending_validation"
+                              ? "Validación Pendiente" 
+                              : "QR Suspendido"
+                          }
                         </span>
                       </div>
                       
@@ -380,14 +475,26 @@ export default function AdminDashboard() {
 
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       {student.status === "suspended" ? (
-                        <>
-                          <button
-                            onClick={() => confirmManualPayment(student.id)}
-                            className="w-full sm:w-auto bg-slate-900 border border-slate-800 text-[#10b981] hover:bg-emerald-500 hover:text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer"
-                          >
-                            Registrar Recaudo Manual
-                          </button>
-                        </>
+                        <button
+                          onClick={() => confirmManualPayment(student.id)}
+                          className="w-full sm:w-auto bg-slate-900 border border-slate-800 text-[#10b981] hover:bg-emerald-500 hover:text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                        >
+                          Registrar Recaudo Manual
+                        </button>
+                      ) : student.status === "pending_validation" ? (
+                        <button
+                          onClick={() => {
+                            const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
+                            if (firstPending) {
+                              approvePendingPayment(firstPending.id, student.id);
+                            } else {
+                              confirmManualPayment(student.id);
+                            }
+                          }}
+                          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans animate-pulse"
+                        >
+                          Validar Pago Reportado
+                        </button>
                       ) : (
                         <span className="text-[10px] text-slate-500 font-mono">Pago Al Día</span>
                       )}
