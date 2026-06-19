@@ -10,10 +10,8 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
 
   const bankDetails = {
     banco: "BBVA Bancomer",
-    beneficiario: "Escuela de Fútbol Club Colombia S.A.S.",
-    cuenta: "0123 4567 8901 2345",
+    beneficiario: "Escuela de Fútbol Club Colombia",
     clabe: "0121 8000 1234 5678 90",
-    referencia: "MORA-2026"
   };
 
   const copyToClipboard = (text) => {
@@ -32,7 +30,7 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
       if (onPaymentSuccess) {
         onPaymentSuccess();
       }
-    }, 1500);
+    }, 1200);
   };
 
   const formatCurrency = (val) => {
@@ -44,38 +42,37 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
   };
 
   return (
-    <div className="w-full max-w-sm p-5 bg-[#0e121e] border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden">
+    <div className="w-full max-w-sm p-5 bg-[#0e121e] border border-slate-800 rounded-3xl shadow-2xl relative overflow-hidden font-sans">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
         <span className="font-display font-black text-xs uppercase tracking-wider text-slate-300">
-          Información de Pago Directo
+          Cuenta Oficial de la Escuela
         </span>
         <div className="flex items-center gap-1 text-[9px] text-slate-500 font-semibold uppercase tracking-wider">
           <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
-          Cuenta Oficial
+          Depósito Directo
         </div>
       </div>
 
       {notified ? (
         <div className="flex flex-col items-center justify-center py-4 text-center animate-fade-in">
-          <div className="w-11 h-11 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mb-3 text-emerald-400">
-            <Check className="w-6 h-6" />
+          <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mb-3 text-red-500 animate-pulse">
+            <Check className="w-5 h-5" />
           </div>
-          <h3 className="font-display font-bold text-sm text-slate-100">¡Pago Notificado!</h3>
-          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-            Tu reporte de depósito fue enviado. En la demo real, la credencial QR se activa de inmediato para facilitar la prueba de acceso.
+          <h3 className="font-display font-black text-xs text-red-500 uppercase tracking-widest">Estado: Depositado</h3>
+          <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+            Reporte enviado. Tu estado ahora es <strong className="text-red-500">"DEPOSITADO"</strong>. El QR se desbloqueará (pasará a verde) una vez que el administrador valide la cuenta.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="text-center bg-[#07090e] border border-slate-800 p-3.5 rounded-2xl">
-            <span className="text-[9px] text-slate-500 font-bold tracking-wider uppercase block">Valor Mensualidad</span>
+            <span className="text-[9px] text-slate-500 font-bold tracking-wider uppercase block">Mensualidad</span>
             <span className="text-xl font-display font-black text-slate-100 mt-0.5 block">{formatCurrency(amount)}</span>
-            <span className="text-[9px] text-slate-400 mt-0.5 block">Matrícula & Cobertura Club Colombia</span>
           </div>
 
-          <div className="bg-[#07090e] border border-slate-800/80 p-3.5 rounded-2xl space-y-2.5 text-left font-sans text-xs">
-            <span className="text-[8px] text-slate-500 font-black tracking-wider uppercase block border-b border-slate-900 pb-1">DATOS DE TRANSFERENCIA</span>
+          <div className="bg-[#07090e] border border-slate-800/80 p-3.5 rounded-2xl space-y-2.5 text-left text-xs">
+            <span className="text-[8px] text-slate-500 font-black tracking-wider uppercase block border-b border-slate-900 pb-1">DATOS PARA TRANSFERENCIA</span>
             
             <div className="space-y-2 pt-0.5">
               <div>
@@ -102,19 +99,19 @@ export default function PaymentSimulator({ amount = 120000, onPaymentSuccess }) 
             </div>
           </div>
 
-          <div className="bg-[#10b981]/5 border border-[#10b981]/15 p-3 rounded-xl text-[10px] text-slate-400 leading-relaxed">
-            💡 **Efectivo:** También puedes realizar el pago directamente en efectivo con el **Profe Luis López** en el horario de entrenamientos.
+          <div className="bg-slate-900/60 border border-slate-800/60 p-3 rounded-xl text-[10px] text-slate-400 leading-relaxed text-center">
+            También puedes realizar el pago en efectivo directamente en la cancha.
           </div>
 
           <button
             onClick={handleNotifyPayment}
             disabled={loading}
-            className="w-full bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
           >
             {loading ? (
               <span className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent" />
             ) : (
-              "Reportar Transferencia / Efectivo"
+              "Reportar como Depositado"
             )}
           </button>
         </div>

@@ -125,6 +125,26 @@ export default function AdminDashboard() {
     }));
   };
 
+  // Poner una solicitud de pago en espera
+  const holdPendingPayment = (paymentId, studentId = 1) => {
+    // 1. Marcar el pago como en espera en localStorage
+    const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
+    const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "on_hold" } : p);
+    localStorage.setItem("pendingPayments", JSON.stringify(updatedPending));
+    setPendingPayments(updatedPending.filter(p => p.status === "pending"));
+
+    // 2. Cambiar estado del alumno a en espera
+    if (studentId === 1) {
+      localStorage.setItem("simulatedStatus", "on_hold");
+    }
+    setStudents(prev => prev.map(s => {
+      if (s.id === studentId) {
+        return { ...s, status: "on_hold" };
+      }
+      return s;
+    }));
+  };
+
   // Aplicar override manual de categoría
   const handleApplyOverride = (e) => {
     e.preventDefault();
@@ -427,16 +447,24 @@ export default function AdminDashboard() {
                           <div className="text-xs font-bold text-slate-200">{payment.studentName}</div>
                           <div className="text-[10px] text-slate-500 flex gap-3">
                             <span>Categoría: {payment.categoryName}</span>
-                            <span className="text-[#10b981] font-semibold">Monto: ${payment.amount.toLocaleString("es-MX")} MXN</span>
+                            <span className="text-red-400 font-bold">Monto: ${payment.amount.toLocaleString("es-MX")} MXN</span>
                           </div>
                           <div className="text-[9px] text-slate-600 font-mono">Reportado: {payment.date}</div>
                         </div>
-                        <button
-                          onClick={() => approvePendingPayment(payment.id, 1)}
-                          className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
-                        >
-                          Confirmar Pago & Activar QR
-                        </button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <button
+                            onClick={() => approvePendingPayment(payment.id, 1)}
+                            className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                          >
+                            OK (Aprobar)
+                          </button>
+                          <button
+                            onClick={() => holdPendingPayment(payment.id, 1)}
+                            className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                          >
+                            En Espera
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -453,14 +481,18 @@ export default function AdminDashboard() {
                           student.status === "active"
                             ? "bg-emerald-500/10 text-emerald-400"
                             : student.status === "pending_validation"
-                              ? "bg-amber-500/10 text-amber-500 animate-pulse"
-                              : "bg-red-500/10 text-red-400 animate-pulse"
+                              ? "bg-red-500/10 text-red-500 animate-pulse"
+                              : student.status === "on_hold"
+                                ? "bg-amber-500/10 text-amber-500"
+                                : "bg-red-500/10 text-red-400 animate-pulse"
                         }`}>
                           {student.status === "active" 
                             ? "Activo (Al día)" 
                             : student.status === "pending_validation"
-                              ? "Validación Pendiente" 
-                              : "QR Suspendido"
+                              ? "DEPOSITADO" 
+                              : student.status === "on_hold"
+                                ? "EN ESPERA"
+                                : "QR Suspendido"
                           }
                         </span>
                       </div>
@@ -473,7 +505,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
                       {student.status === "suspended" ? (
                         <button
                           onClick={() => confirmManualPayment(student.id)}
@@ -482,18 +514,41 @@ export default function AdminDashboard() {
                           Registrar Recaudo Manual
                         </button>
                       ) : student.status === "pending_validation" ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
+                              if (firstPending) {
+                                approvePendingPayment(firstPending.id, student.id);
+                              } else {
+                                confirmManualPayment(student.id);
+                              }
+                            }}
+                            className="bg-emerald-500 text-slate-950 hover:bg-emerald-600 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                          >
+                            OK (Aprobar)
+                          </button>
+                          <button
+                            onClick={() => {
+                              const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
+                              if (firstPending) {
+                                holdPendingPayment(firstPending.id, student.id);
+                              } else {
+                                localStorage.setItem("simulatedStatus", "on_hold");
+                                setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: "on_hold" } : s));
+                              }
+                            }}
+                            className="bg-amber-500 text-slate-950 hover:bg-amber-600 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                          >
+                            En Espera
+                          </button>
+                        </>
+                      ) : student.status === "on_hold" ? (
                         <button
-                          onClick={() => {
-                            const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
-                            if (firstPending) {
-                              approvePendingPayment(firstPending.id, student.id);
-                            } else {
-                              confirmManualPayment(student.id);
-                            }
-                          }}
-                          className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans animate-pulse"
+                          onClick={() => confirmManualPayment(student.id)}
+                          className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
                         >
-                          Validar Pago Reportado
+                          Aprobar Pago (OK)
                         </button>
                       ) : (
                         <span className="text-[10px] text-slate-500 font-mono">Pago Al Día</span>

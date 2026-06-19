@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
@@ -131,14 +131,33 @@ export default function ParentDashboard() {
 
           {/* Si está en proceso de validación */}
           {studentStatus === "pending_validation" && (
-            <div className="w-full bg-[#0e121e] border border-slate-800 p-5 rounded-3xl text-center space-y-3.5 font-sans">
-              <div className="w-9 h-9 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-amber-400">
-                <span className="animate-spin rounded-full h-4.5 w-4.5 border-2 border-amber-400 border-t-transparent" />
+            <div className="w-full bg-[#0e121e] border border-red-950/60 p-5 rounded-3xl text-center space-y-3 font-sans">
+              <div className="w-9 h-9 bg-red-500/10 border border-red-500/30 rounded-full flex items-center justify-center mx-auto text-red-500 animate-pulse">
+                <Clock className="w-4.5 h-4.5" />
               </div>
-              <h4 className="font-display font-bold text-xs uppercase tracking-wider text-amber-500">Validación en Proceso</h4>
+              <h4 className="font-display font-black text-xs uppercase tracking-widest text-red-500">Reportado: Depositado</h4>
               <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
-                Reportaste tu pago. El <strong>Profe Luis López</strong> está validando el depósito en la cuenta del club. Tu credencial QR se habilitará de forma automática en cuanto confirme la validación.
+                Has reportado tu transferencia. Tu solicitud está <strong className="text-red-400">en espera de validación</strong>. El Profe Luis López verificará su cuenta bancaria. Tu credencial QR se reactivará automáticamente en cuanto confirme.
               </p>
+            </div>
+          )}
+
+          {/* Si está en espera / on hold */}
+          {studentStatus === "on_hold" && (
+            <div className="w-full flex flex-col items-center gap-3 animate-pulse-subtle font-sans">
+              <div className="bg-[#0e121e] border border-amber-950/60 p-5 rounded-3xl text-center space-y-3 w-full">
+                <div className="w-9 h-9 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-amber-500">
+                  <AlertTriangle className="w-4.5 h-4.5" />
+                </div>
+                <h4 className="font-display font-black text-xs uppercase tracking-widest text-amber-500">Estado: En Espera</h4>
+                <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
+                  El administrador marcó tu pago en **En Espera** (no aparece aún en la cuenta o requiere aclaración). Revisa tu cuenta o haz la transferencia de nuevo si es necesario.
+                </p>
+              </div>
+              <PaymentSimulator 
+                amount={120000} 
+                onPaymentSuccess={handlePaymentSuccess} 
+              />
             </div>
           )}
 
