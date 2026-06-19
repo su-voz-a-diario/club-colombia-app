@@ -35,15 +35,39 @@ export default function CoachDashboard() {
     setTimeout(() => setAttendanceSaved(false), 3000);
   };
 
-  // Simular dictado por voz de notas tácticas (Speech-to-Text mock)
-  const simulateVoiceDictation = () => {
+  // Dictado por voz real usando Web Speech API del navegador
+  const handleVoiceDictation = () => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("El reconocimiento de voz no está soportado en este navegador o dispositivo. Por favor intenta usando Google Chrome o Safari.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-CO"; // Español Colombia
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
     setDictating(true);
-    setTimeout(() => {
-      setTacticalNotes(
-        "Destaca por su excelente velocidad y regate en el uno contra uno. Muestra gran disciplina táctica en el repliegue defensivo y buena visión de juego en pases cortos."
-      );
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setTacticalNotes((prev) => prev ? `${prev} ${transcript}` : transcript);
       setDictating(false);
-    }, 2000);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Error en dictado de voz:", event.error);
+      setDictating(false);
+    };
+
+    recognition.onend = () => {
+      setDictating(false);
+    };
+
+    recognition.start();
   };
 
   // Simular guardado de evaluación técnica
@@ -289,14 +313,14 @@ export default function CoachDashboard() {
                 <label className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">OBSERVACIONES TÁCTICAS</label>
                 <button
                   type="button"
-                  onClick={simulateVoiceDictation}
+                  onClick={handleVoiceDictation}
                   disabled={dictating}
                   className={`text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
                     dictating ? "text-red-500 animate-pulse" : "text-amber-500 hover:text-amber-400"
                   }`}
                 >
                   <Mic className="w-3 h-3" />
-                  {dictating ? "Escuchando..." : "Dictado por Voz (AI)"}
+                  {dictating ? "Escuchando micrófono..." : "Dictado por Voz Real"}
                 </button>
               </div>
               <textarea
