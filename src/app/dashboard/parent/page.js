@@ -98,7 +98,7 @@ export default function ParentDashboard() {
               <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl w-full text-center">
                 <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider block">Atención: Mensualidad Vencida</span>
                 <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                  Has superado el periodo de gracia de 5 días hábiles. Realiza tu pago mediante Mercado Pago para rehabilitar tu QR de inmediato.
+                  Has superado el periodo de gracia de 5 días hábiles. Realiza tu transferencia bancaria directa (o pago en efectivo con el Profe Luis López) y repórtalo abajo para reactivar tu QR al instante.
                 </p>
               </div>
               <PaymentSimulator 

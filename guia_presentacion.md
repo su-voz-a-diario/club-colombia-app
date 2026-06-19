@@ -18,8 +18,8 @@ Aquí tienes un instructivo sencillo de lo que puedes hacer y probar en cada sec
 ## 📝 2. Flujo de Inscripción (Para Padres Nuevos)
 *   **¿Qué hacer?** Haz clic en **"Inscripción en Línea"** en la parte superior derecha.
 *   **Paso 1:** Escribe los datos del padre y del niño. Pon la fecha de nacimiento (por ejemplo, año **2017**). Verás cómo el sistema calcula su edad (9 años) y le asigna automáticamente la categoría **"Sub-10 Competitivo"** con sus horarios.
-*   **Paso 2:** Selecciona pago por Tarjeta o PSE. Haz clic en **Pagar**.
-*   **Paso 3:** ¡Listo! El sistema procesa el cobro ficticio y te entrega tu **Credencial QR activa** para entrar a los entrenamientos.
+*   **Paso 2:** Visualiza los datos de la transferencia bancaria (BBVA) y haz clic en **"Reportar Transferencia / Efectivo"**.
+*   **Paso 3:** ¡Listo! El sistema registra tu reporte de pago simulado y te entrega tu **Credencial QR activa** para entrar a los entrenamientos.
 
 ---
 
@@ -35,7 +35,7 @@ Aquí tienes un instructivo sencillo de lo que puedes hacer y probar en cada sec
 *(Entra seleccionando la tarjeta "Entrenador" en la pantalla de ingresar).*
 *   **Asistencia Rápida:** Verás la lista de alumnos de tu categoría. Puedes marcar de forma rápida en tu celular: **P** (Presente), **A** (Ausente) o **J** (Justificado). Al finalizar, haz clic en guardar.
 *   **Ficha de Evaluación:** Selecciona a un alumno y usa los controles deslizantes para calificar su rendimiento de 1 a 10 en las 6 habilidades del club.
-*   **Dictado por voz con Inteligencia Artificial (Simulación):** Haz clic en el botón con forma de micrófono. El sistema simulará el dictado por voz y escribirá un comentario técnico profesional de forma automática en la caja de observaciones. Haz clic en publicar para enviárselo al padre del niño.
+*   **Observaciones Tácticas:** Selecciona a un alumno, escribe comentarios en la caja de texto. Al usar tu teléfono celular, puedes presionar el icono de micrófono integrado del teclado móvil para dictar observaciones rápidas y profesionales de forma nativa. Haz clic en publicar para enviárselo al padre del niño.
 
 ---
 

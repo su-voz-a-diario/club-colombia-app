@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Mic, Send, Star, Volume2 } from "lucide-react";
+import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
 
 export default function CoachDashboard() {
   // Lista de alumnos de la categoría asignada (Sub-10 Competitivo)
@@ -26,7 +26,6 @@ export default function CoachDashboard() {
   const [physical, setPhysical] = useState(8);
   const [discipline, setDiscipline] = useState(9);
   const [tacticalNotes, setTacticalNotes] = useState("");
-  const [dictating, setDictating] = useState(false);
   const [evaluationSaved, setEvaluationSaved] = useState(false);
 
   // Simular guardado de asistencia
@@ -35,40 +34,6 @@ export default function CoachDashboard() {
     setTimeout(() => setAttendanceSaved(false), 3000);
   };
 
-  // Dictado por voz real usando Web Speech API del navegador
-  const handleVoiceDictation = () => {
-    if (typeof window === "undefined") return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("El reconocimiento de voz no está soportado en este navegador o dispositivo. Por favor intenta usando Google Chrome o Safari.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "es-CO"; // Español Colombia
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    setDictating(true);
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setTacticalNotes((prev) => prev ? `${prev} ${transcript}` : transcript);
-      setDictating(false);
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Error en dictado de voz:", event.error);
-      setDictating(false);
-    };
-
-    recognition.onend = () => {
-      setDictating(false);
-    };
-
-    recognition.start();
-  };
 
   // Simular guardado de evaluación técnica
   const saveEvaluation = (e) => {
@@ -307,21 +272,10 @@ export default function CoachDashboard() {
               </div>
             </div>
 
-            {/* Notas tácticas con dictado de voz simulado */}
+            {/* Notas tácticas */}
             <div className="space-y-1.5 pt-2">
               <div className="flex justify-between items-center">
                 <label className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">OBSERVACIONES TÁCTICAS</label>
-                <button
-                  type="button"
-                  onClick={handleVoiceDictation}
-                  disabled={dictating}
-                  className={`text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
-                    dictating ? "text-red-500 animate-pulse" : "text-amber-500 hover:text-amber-400"
-                  }`}
-                >
-                  <Mic className="w-3 h-3" />
-                  {dictating ? "Escuchando micrófono..." : "Dictado por Voz Real"}
-                </button>
               </div>
               <textarea
                 rows={3}
