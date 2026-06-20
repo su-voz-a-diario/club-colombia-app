@@ -369,7 +369,6 @@ export default function AdminDashboard() {
       {/* Header */}
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
-          <img src="/logo.jpeg" alt="Logo" className="w-6 h-6 object-contain rounded-md" />
           <span className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
             Admin Consola <span className="text-[#10b981]">Club Colombia</span>
           </span>
@@ -390,6 +389,21 @@ export default function AdminDashboard() {
           </Link>
         </div>
       </header>
+
+      {/* Portal Welcome Section */}
+      <div className="max-w-6xl w-full mx-auto px-4 pt-6 text-center flex flex-col items-center">
+        <img 
+          src="/logo.png" 
+          alt="Escudo Club Colombia" 
+          className="w-20 h-20 object-contain mb-3 filter drop-shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse-subtle" 
+        />
+        <h2 className="font-display font-black text-xl text-slate-100 uppercase tracking-wider">
+          Consola de Administración
+        </h2>
+        <p className="text-[9px] font-mono text-[#10b981] font-bold uppercase tracking-widest mt-1">
+          Escuela de Fútbol Club Colombia
+        </p>
+      </div>
 
       {/* Main Body */}
       <div className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">

@@ -45,7 +45,6 @@ export default function Home() {
       {/* Header / Navegación */}
       <header className="sticky top-0 z-50 glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
-          <img src="/logo.jpeg" alt="Logo" className="w-7 h-7 object-contain rounded-md" />
           <span className="font-display font-black text-lg tracking-wide uppercase text-slate-100">
             Club <span className="text-[#10b981]">Colombia</span>
           </span>
@@ -68,31 +67,19 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Tablón de Anuncios / Comunicados del Día */}
-      <div className="max-w-4xl w-full mx-auto px-6 pt-8">
-        <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4 flex gap-4 items-start animate-pulse-subtle">
-          <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-500 shrink-0">
-            <Megaphone className="w-5 h-5" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-amber-500 font-bold uppercase tracking-widest">Comunicado Oficial del Club</span>
-              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {announcement.date}
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed font-sans">
-              {announcement.text}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Hero Section */}
       <section className="flex-1 flex flex-col justify-center items-center px-6 py-12 text-center max-w-4xl mx-auto relative overflow-hidden">
         {/* Glows de fondo */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-emerald-500/5 filter blur-[120px] pointer-events-none" />
+
+        {/* Logo Grande Centrado */}
+        <div className="mb-6 z-10 flex justify-center">
+          <img 
+            src="/logo.png" 
+            alt="Escudo Club Colombia" 
+            className="w-32 h-32 sm:w-40 sm:h-40 object-contain filter drop-shadow-[0_0_25px_rgba(16,185,129,0.25)] animate-pulse-subtle" 
+          />
+        </div>
 
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 mb-6 z-10">
           <Trophy className="w-4 h-4 text-amber-500" />
@@ -130,6 +117,27 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      {/* Tablón de Anuncios / Comunicados del Día - Reubicado */}
+      <div className="max-w-4xl w-full mx-auto px-6 pb-12">
+        <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4 flex gap-4 items-start animate-pulse-subtle">
+          <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-500 shrink-0">
+            <Megaphone className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono text-amber-500 font-bold uppercase tracking-widest">Comunicado Oficial del Club</span>
+              <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {announcement.date}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              {announcement.text}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Características Destacadas (Interactivas) */}
       <section className="px-6 py-16 border-t border-slate-900/80 bg-[#090d16]/30">

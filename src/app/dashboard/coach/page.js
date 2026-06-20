@@ -101,7 +101,6 @@ export default function CoachDashboard() {
       {/* Header optimizado para celular */}
       <header className="glass-panel border-b border-slate-900 px-5 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <img src="/logo.jpeg" alt="Logo" className="w-5 h-5 object-contain rounded-md" />
           <div>
             <h1 className="font-display font-black text-xs uppercase text-slate-200">Prof. Mario Silva</h1>
             <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-wider">Director Técnico Sub-10</p>
@@ -119,6 +118,21 @@ export default function CoachDashboard() {
           </Link>
         </div>
       </header>
+
+      {/* Portal Welcome Section */}
+      <div className="px-4 pt-6 pb-2 text-center flex flex-col items-center border-b border-slate-900/40 bg-[#090d16]/10">
+        <img 
+          src="/logo.png" 
+          alt="Escudo Club Colombia" 
+          className="w-16 h-16 object-contain mb-2 filter drop-shadow-[0_0_12px_rgba(16,185,129,0.15)] animate-pulse-subtle" 
+        />
+        <h2 className="font-display font-black text-sm text-slate-100 uppercase tracking-wider">
+          Portal del Entrenador
+        </h2>
+        <p className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">
+          Club Colombia • Categoría Sub-10
+        </p>
+      </div>
 
       {/* Selector de módulos en cabecera */}
       <div className="px-4 pt-4 pb-2 grid grid-cols-2 gap-2 bg-[#090d16]/30">

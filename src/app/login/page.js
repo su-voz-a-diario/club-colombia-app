@@ -236,9 +236,13 @@ export default function Login() {
       <div className="w-full max-w-md mx-auto z-10">
         {/* Logo */}
         <div className="flex flex-col items-center justify-center mb-8">
-          <Link href="/" className="flex items-center gap-2 mb-2 hover:opacity-80 transition-all">
-            <img src="/logo.jpeg" alt="Logo" className="w-8 h-8 object-contain rounded-md" />
-            <span className="font-display font-black text-xl tracking-wider uppercase">
+          <Link href="/" className="flex flex-col items-center gap-3.5 mb-2 hover:opacity-80 transition-all text-center">
+            <img 
+              src="/logo.png" 
+              alt="Logo Club Colombia" 
+              className="w-24 h-24 object-contain filter drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" 
+            />
+            <span className="font-display font-black text-2xl tracking-wider uppercase">
               Club <span className="text-[#10b981]">Colombia</span>
             </span>
           </Link>
