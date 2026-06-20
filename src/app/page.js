@@ -45,7 +45,7 @@ export default function Home() {
       {/* Header / Navegación */}
       <header className="sticky top-0 z-50 glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
-          <ShieldCheck className="w-7 h-7 text-[#10b981]" />
+          <img src="/logo.jpeg" alt="Logo" className="w-7 h-7 object-contain rounded-md" />
           <span className="font-display font-black text-lg tracking-wide uppercase text-slate-100">
             Club <span className="text-[#10b981]">Colombia</span>
           </span>

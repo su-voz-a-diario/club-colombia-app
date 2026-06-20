@@ -141,7 +141,7 @@ export default function ParentDashboard() {
       {/* Header */}
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
-          <ShieldCheck className="w-6 h-6 text-[#10b981]" />
+          <img src="/logo.jpeg" alt="Logo" className="w-6 h-6 object-contain rounded-md" />
           <div>
             <span className="font-display font-black text-xs uppercase tracking-wider text-slate-200 block">
               Portal Deportista <span className="text-[#10b981]">Club Colombia</span>

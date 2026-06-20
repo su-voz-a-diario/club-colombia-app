@@ -101,7 +101,7 @@ export default function CoachDashboard() {
       {/* Header optimizado para celular */}
       <header className="glass-panel border-b border-slate-900 px-5 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <Dumbbell className="w-5 h-5 text-[#10b981]" />
+          <img src="/logo.jpeg" alt="Logo" className="w-5 h-5 object-contain rounded-md" />
           <div>
             <h1 className="font-display font-black text-xs uppercase text-slate-200">Prof. Mario Silva</h1>
             <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-wider">Director Técnico Sub-10</p>
