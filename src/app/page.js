@@ -73,19 +73,12 @@ export default function Home() {
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-emerald-500/5 filter blur-[120px] pointer-events-none" />
 
         {/* Logo Grande Centrado */}
-        <div className="mb-6 z-10 flex justify-center">
+        <div className="mb-6 z-10 flex justify-center animate-fade-in">
           <img 
             src="/logo.png" 
             alt="Escudo Club Colombia" 
-            className="w-32 h-32 sm:w-40 sm:h-40 object-contain filter drop-shadow-[0_0_25px_rgba(16,185,129,0.25)] animate-pulse-subtle" 
+            className="w-44 h-44 sm:w-56 sm:h-56 object-contain filter drop-shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-pulse-subtle" 
           />
-        </div>
-
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 mb-6 z-10">
-          <Trophy className="w-4 h-4 text-amber-500" />
-          <span className="text-[10px] font-display font-bold uppercase tracking-wider text-slate-300">
-            Formación Deportiva de Alto Rendimiento
-          </span>
         </div>
 
         <h1 className="font-display font-black text-4xl sm:text-6xl text-slate-100 leading-[1.1] tracking-tight z-10 max-w-4xl">
@@ -98,9 +91,12 @@ export default function Home() {
           El futuro del fútbol se gestiona aquí.
         </p>
 
-        <p className="text-slate-400 text-sm sm:text-base max-w-xl mt-6 leading-relaxed z-10">
-          Un ecosistema digital premium para atletas, entrenadores y padres. Ficha técnica en tiempo real, credencial QR segura y cobro recurrente integrado.
-        </p>
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 mt-6 z-10">
+          <Trophy className="w-4 h-4 text-amber-500" />
+          <span className="text-[10px] font-display font-bold uppercase tracking-wider text-slate-300">
+            Formación Deportiva de Alto Rendimiento
+          </span>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mt-8 z-10 w-full justify-center">
           <Link
