@@ -40,6 +40,8 @@ export default function AdminDashboard() {
   const [manualStudentAge, setManualStudentAge] = useState("");
   const [manualParentName, setManualParentName] = useState("");
   const [manualParentPhone, setManualParentPhone] = useState("");
+  const [manualParentEmail, setManualParentEmail] = useState("");
+  const [manualParentPassword, setManualParentPassword] = useState("");
   const [manualPaidCash, setManualPaidCash] = useState(false);
   const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
@@ -111,15 +113,28 @@ export default function AdminDashboard() {
 
   // Confirmar pago manual para levantar suspensión (Directo desde lista)
   const confirmManualPayment = (id) => {
+    let studentName = "";
     setStudents(prev => prev.map(s => {
       if (s.id === id) {
+        studentName = s.name;
         return { ...s, status: "active", dueDays: 0 };
       }
       return s;
     }));
-    if (id === 1) {
+    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
+    if (id === 1 || studentName === simName) {
       localStorage.setItem("simulatedStatus", "active");
     }
+
+    // Actualizar la base de datos de usuarios de localStorage
+    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+    const updatedUsers = users.map(u => {
+      if (u.studentName === studentName || (id === 1 && u.email === "ricardo.garcia@gmail.com")) {
+        return { ...u, status: "active" };
+      }
+      return u;
+    });
+    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
@@ -141,6 +156,16 @@ export default function AdminDashboard() {
       }
       return s;
     }));
+
+    // 3. Actualizar la base de datos de usuarios de localStorage
+    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+    const updatedUsers = users.map(u => {
+      if (u.studentName === studentNameFromPayment) {
+        return { ...u, status: "active" };
+      }
+      return u;
+    });
+    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
   };
 
   // Poner una solicitud de pago en espera
@@ -162,6 +187,16 @@ export default function AdminDashboard() {
       }
       return s;
     }));
+
+    // 3. Actualizar la base de datos de usuarios de localStorage
+    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+    const updatedUsers = users.map(u => {
+      if (u.studentName === studentNameFromPayment) {
+        return { ...u, status: "on_hold" };
+      }
+      return u;
+    });
+    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
   };
 
     // Registrar un alumno de forma manual
@@ -198,6 +233,26 @@ export default function AdminDashboard() {
     localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
     localStorage.setItem("simulatedParentName", manualParentName);
 
+    // Registrar usuario en la base de datos simulada de registeredUsers
+    if (manualParentEmail && manualParentPassword) {
+      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+      const emailExists = users.some(u => u.email.toLowerCase() === manualParentEmail.toLowerCase());
+      if (!emailExists) {
+        const newUser = {
+          email: manualParentEmail.toLowerCase(),
+          password: manualParentPassword,
+          role: "parent",
+          name: manualParentName || (manualStudentName + " Acudiente"),
+          phone: manualParentPhone || "",
+          studentName: manualStudentName,
+          categoryName: category,
+          status: manualPaidCash ? "active" : "suspended"
+        };
+        users.push(newUser);
+        localStorage.setItem("registeredUsers", JSON.stringify(users));
+      }
+    }
+
     // Si pagó en efectivo/transferencia directa, registrar en el historial de pagos
     if (manualPaidCash) {
       const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
@@ -219,6 +274,8 @@ export default function AdminDashboard() {
     setManualStudentAge("");
     setManualParentName("");
     setManualParentPhone("");
+    setManualParentEmail("");
+    setManualParentPassword("");
     setManualPaidCash(false);
     setManualPaymentConcept("monthly");
     setShowAddForm(false);
@@ -435,6 +492,30 @@ export default function AdminDashboard() {
                         placeholder="Ej. 418 123 4567"
                         value={manualParentPhone}
                         onChange={(e) => setManualParentPhone(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO (LOGIN DEL PADRE)</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="Ej. acudiente@correo.com"
+                        value={manualParentEmail}
+                        onChange={(e) => setManualParentEmail(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CONTRASEÑA DE ACCESO</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="Ej. acudiente123"
+                        value={manualParentPassword}
+                        onChange={(e) => setManualParentPassword(e.target.value)}
                         className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
                       />
                     </div>
