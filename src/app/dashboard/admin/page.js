@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles } from "lucide-react";
+import { db, auth } from "@/lib/firebase";
+import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs } from "firebase/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 
 export default function AdminDashboard() {
   const formatCurrency = (val) => {
@@ -13,16 +17,8 @@ export default function AdminDashboard() {
     }).format(val);
   };
 
-  // Datos simulados en estado
-  const [students, setStudents] = useState([
-    { id: 1, name: "Juan Andrés García", age: 9, category: "Sub-10 Competitivo", assignment: "automatic", status: "active", dueDays: 0 },
-    { id: 2, name: "Mateo Ospina Díaz", age: 11, category: "Sub-12 Elite", assignment: "automatic", status: "active", dueDays: 2 },
-    { id: 3, name: "Sebastián Bedoya", age: 10, category: "Sub-10 Competitivo", assignment: "manual", status: "active", dueDays: 0, overrideReason: "Promovido por alto nivel técnico" },
-    { id: 4, name: "Santiago Valencia", age: 12, category: "Sub-12 Elite", assignment: "automatic", status: "suspended", dueDays: 7 }, // Mora > 5 días hábiles
-    { id: 5, name: "Nicolás Restrepo", age: 7, category: "Sub-8 Iniciación", assignment: "automatic", status: "active", dueDays: 0 },
-    { id: 6, name: "Alejandro Londoño", age: 14, category: "Sub-15 Avanzado", assignment: "automatic", status: "suspended", dueDays: 6 } // Mora > 5 días hábiles
-  ]);
-
+  // Datos de Firestore en estado
+  const [students, setStudents] = useState([]);
   const [activeTab, setActiveTab] = useState("students"); // 'students' | 'billing' | 'schedules' | 'notifications'
   
   // Estados para override
@@ -45,162 +41,187 @@ export default function AdminDashboard() {
   const [manualPaidCash, setManualPaidCash] = useState(false);
   const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
-  // Cargar estudiantes registrados por el simulador si existen, y configurar consulta en intervalos
+  // Cargar estudiantes y lista de validaciones de pago de Firestore
   const [pendingPayments, setPendingPayments] = useState([]);
 
   useEffect(() => {
-    const refreshData = () => {
-      // Leer estado simulado de Juan Andrés García (ID 1)
-      const simStatus = localStorage.getItem("simulatedStatus");
-      if (simStatus) {
-        setStudents(prev => prev.map(s => {
-          if (s.id === 1) {
-            return { ...s, status: simStatus, dueDays: simStatus === "active" ? 0 : simStatus === "pending_validation" ? 0 : 7 };
-          }
-          return s;
-        }));
-      }
+    // Escuchar estudiantes en tiempo real
+    const unsubscribeStudents = onSnapshot(collection(db, "students"), (snapshot) => {
+      const studs = [];
+      snapshot.forEach((doc) => {
+        studs.push({ id: doc.id, ...doc.data() });
+      });
+      setStudents(studs);
+    });
 
-      // Cargar alumnos recién registrados si los hay
-      const simName = localStorage.getItem("simulatedStudentName");
-      const simCat = localStorage.getItem("simulatedCategory");
-      if (simName && simCat) {
-        setStudents(prev => {
-          if (prev.some(s => s.name === simName)) return prev;
-          return [
-            ...prev,
-            {
-              id: 100, // ID de prueba para nuevo registrado
-              name: simName,
-              age: 9,
-              category: simCat,
-              assignment: "automatic",
-              status: simStatus || "active",
-              dueDays: 0
-            }
-          ];
-        });
-      }
+    // Escuchar pagos pendientes en tiempo real
+    const qPayments = query(collection(db, "payments"), where("status", "==", "pending"));
+    const unsubscribePayments = onSnapshot(qPayments, (snapshot) => {
+      const pays = [];
+      snapshot.forEach((doc) => {
+        pays.push({ id: doc.id, ...doc.data() });
+      });
+      setPendingPayments(pays);
+    });
 
-      // Cargar lista de validaciones de pago pendientes
-      const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-      setPendingPayments(pending.filter(p => p.status === "pending"));
+    return () => {
+      unsubscribeStudents();
+      unsubscribePayments();
     };
-
-    refreshData();
-    const interval = setInterval(refreshData, 2000);
-    return () => clearInterval(interval);
   }, []);
 
   // Simular la reconciliación o envío de alertas de mora
   const [sendingAlerts, setSendingAlerts] = useState(false);
   const [alertSuccess, setAlertSuccess] = useState(false);
 
-  const triggerMoraAlerts = () => {
+  const triggerMoraAlerts = async () => {
     setSendingAlerts(true);
-    setTimeout(() => {
-      setSendingAlerts(false);
-      setAlertSuccess(true);
-      // Poner al alumno 1 en mora de prueba para la demo si no está pagado
-      const simStatus = localStorage.getItem("simulatedStatus");
-      if (simStatus !== "active" && simStatus !== "pending_validation") {
-        localStorage.setItem("simulatedStatus", "suspended");
-        setStudents(prev => prev.map(s => s.id === 1 ? { ...s, status: "suspended", dueDays: 7 } : s));
+    try {
+      // En una base de datos real, podemos simular que marcamos al primer alumno suspendido 
+      // o consultar a la API. Para que sea real en Firestore, buscamos alumnos activos con retraso 
+      // y actualizamos su estado a suspendido.
+      const q = query(collection(db, "students"), where("status", "==", "active"), where("dueDays", ">", 5));
+      const querySnapshot = await getDocs(q);
+      for (const d of querySnapshot.docs) {
+        await updateDoc(doc(db, "students", d.id), { status: "suspended" });
+        // También actualizar en user
+        const studentData = d.data();
+        if (studentData.parentEmail) {
+          await updateDoc(doc(db, "users", studentData.parentEmail.toLowerCase()), { status: "suspended" });
+        }
       }
+      
+      // Sincronizar el estado simulado de Ricardo García si es moroso
+      const ricardoRef = doc(db, "users", "ricardo.garcia@gmail.com");
+      const ricardoSnap = await getDoc(ricardoRef);
+      if (ricardoSnap.exists()) {
+        const ricardoData = ricardoSnap.data();
+        if (ricardoData.status === "suspended") {
+          localStorage.setItem("simulatedStatus", "suspended");
+        }
+      }
+      
+      setAlertSuccess(true);
       setTimeout(() => setAlertSuccess(false), 3000);
-    }, 1500);
+    } catch (err) {
+      console.error("Error auditing mora:", err);
+    } finally {
+      setSendingAlerts(false);
+    }
   };
 
   // Confirmar pago manual para levantar suspensión (Directo desde lista)
-  const confirmManualPayment = (id) => {
-    let studentName = "";
-    setStudents(prev => prev.map(s => {
-      if (s.id === id) {
-        studentName = s.name;
-        return { ...s, status: "active", dueDays: 0 };
+  const confirmManualPayment = async (studentIdOrName) => {
+    try {
+      // Buscamos al estudiante por su ID de documento (el nombre en Firestore)
+      let studentDocRef = doc(db, "students", studentIdOrName);
+      let studentSnap = await getDoc(studentDocRef);
+      
+      // Si no existe por nombre, puede ser un ID numérico (de los iniciales), buscamos por query
+      if (!studentSnap.exists()) {
+        const q = query(collection(db, "students"), where("name", "==", studentIdOrName));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          studentDocRef = doc(db, "students", qSnap.docs[0].id);
+          studentSnap = qSnap.docs[0];
+        } else {
+          console.error("No se encontró el alumno a confirmar pago manual:", studentIdOrName);
+          return;
+        }
       }
-      return s;
-    }));
-    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
-    if (id === 1 || studentName === simName) {
-      localStorage.setItem("simulatedStatus", "active");
-    }
 
-    // Actualizar la base de datos de usuarios de localStorage
-    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-    const updatedUsers = users.map(u => {
-      if (u.studentName === studentName || (id === 1 && u.email === "ricardo.garcia@gmail.com")) {
-        return { ...u, status: "active" };
+      const studentData = studentSnap.data();
+      
+      // Actualizar en Firestore a 'active'
+      await updateDoc(studentDocRef, {
+        status: "active",
+        dueDays: 0
+      });
+
+      // Actualizar el perfil del padre
+      if (studentData.parentEmail) {
+        const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
+        await updateDoc(parentRef, {
+          status: "active"
+        });
       }
-      return u;
-    });
-    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
+
+      // Sincronizar localStorage para pruebas
+      if (studentData.name === "Juan Andrés García") {
+        localStorage.setItem("simulatedStatus", "active");
+      }
+    } catch (err) {
+      console.error("Error en confirmManualPayment:", err);
+    }
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
-  const approvePendingPayment = (paymentId, studentNameFromPayment) => {
-    // 1. Marcar el pago como aprobado en localStorage
-    const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-    const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "approved" } : p);
-    localStorage.setItem("pendingPayments", JSON.stringify(updatedPending));
-    setPendingPayments(updatedPending.filter(p => p.status === "pending"));
+  const approvePendingPayment = async (paymentId, studentNameFromPayment) => {
+    try {
+      // 1. Marcar el pago como aprobado en Firestore
+      const paymentRef = doc(db, "payments", paymentId);
+      await updateDoc(paymentRef, { status: "approved" });
 
-    // 2. Reactivar al alumno en la lista local y localStorage
-    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
-    if (studentNameFromPayment === simName || studentNameFromPayment === "Juan Andrés García") {
-      localStorage.setItem("simulatedStatus", "active");
+      // 2. Reactivar al alumno en la colección 'students' de Firestore
+      const studentRef = doc(db, "students", studentNameFromPayment);
+      const studentSnap = await getDoc(studentRef);
+      
+      if (studentSnap.exists()) {
+        const studentData = studentSnap.data();
+        await updateDoc(studentRef, {
+          status: "active",
+          dueDays: 0
+        });
+
+        // 3. Actualizar la base de datos de usuarios
+        if (studentData.parentEmail) {
+          const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
+          await updateDoc(parentRef, { status: "active" });
+        }
+      }
+
+      // Sincronizar localStorage
+      if (studentNameFromPayment === "Juan Andrés García") {
+        localStorage.setItem("simulatedStatus", "active");
+      }
+    } catch (err) {
+      console.error("Error al aprobar pago:", err);
     }
-    setStudents(prev => prev.map(s => {
-      if (s.name === studentNameFromPayment) {
-        return { ...s, status: "active", dueDays: 0 };
-      }
-      return s;
-    }));
-
-    // 3. Actualizar la base de datos de usuarios de localStorage
-    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-    const updatedUsers = users.map(u => {
-      if (u.studentName === studentNameFromPayment) {
-        return { ...u, status: "active" };
-      }
-      return u;
-    });
-    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
   };
 
   // Poner una solicitud de pago en espera
-  const holdPendingPayment = (paymentId, studentNameFromPayment) => {
-    // 1. Marcar el pago como en espera en localStorage
-    const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-    const updatedPending = pending.map(p => p.id === paymentId ? { ...p, status: "on_hold" } : p);
-    localStorage.setItem("pendingPayments", JSON.stringify(updatedPending));
-    setPendingPayments(updatedPending.filter(p => p.status === "pending"));
+  const holdPendingPayment = async (paymentId, studentNameFromPayment) => {
+    try {
+      // 1. Marcar el pago como en espera en Firestore
+      const paymentRef = doc(db, "payments", paymentId);
+      await updateDoc(paymentRef, { status: "on_hold" });
 
-    // 2. Cambiar estado del alumno a en espera
-    const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
-    if (studentNameFromPayment === simName || studentNameFromPayment === "Juan Andrés García") {
-      localStorage.setItem("simulatedStatus", "on_hold");
+      // 2. Cambiar estado del alumno a en espera
+      const studentRef = doc(db, "students", studentNameFromPayment);
+      const studentSnap = await getDoc(studentRef);
+
+      if (studentSnap.exists()) {
+        const studentData = studentSnap.data();
+        await updateDoc(studentRef, { status: "on_hold" });
+
+        // 3. Actualizar la base de datos de usuarios
+        if (studentData.parentEmail) {
+          const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
+          await updateDoc(parentRef, { status: "on_hold" });
+        }
+      }
+
+      // Sincronizar localStorage
+      if (studentNameFromPayment === "Juan Andrés García") {
+        localStorage.setItem("simulatedStatus", "on_hold");
+      }
+    } catch (err) {
+      console.error("Error al poner pago en espera:", err);
     }
-    setStudents(prev => prev.map(s => {
-      if (s.name === studentNameFromPayment) {
-        return { ...s, status: "on_hold" };
-      }
-      return s;
-    }));
-
-    // 3. Actualizar la base de datos de usuarios de localStorage
-    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-    const updatedUsers = users.map(u => {
-      if (u.studentName === studentNameFromPayment) {
-        return { ...u, status: "on_hold" };
-      }
-      return u;
-    });
-    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
   };
 
     // Registrar un alumno de forma manual
-  const handleManualRegister = (e) => {
+  const handleManualRegister = async (e) => {
     e.preventDefault();
     if (!manualStudentName || !manualStudentAge) return;
 
@@ -214,59 +235,80 @@ export default function AdminDashboard() {
       category = "Sub-15 Avanzado";
     }
 
-    const newStudent = {
-      id: Date.now(),
-      name: manualStudentName,
-      age: ageNum,
-      category: category,
-      assignment: "automatic",
-      status: manualPaidCash ? "active" : "suspended",
-      dueDays: manualPaidCash ? 0 : 7
-    };
+    try {
+      // 1. Guardar deportista en la colección 'students' en Firestore
+      await setDoc(doc(db, "students", manualStudentName), {
+        name: manualStudentName,
+        age: ageNum,
+        category: category,
+        assignment: "automatic",
+        status: manualPaidCash ? "active" : "suspended",
+        dueDays: manualPaidCash ? 0 : 7,
+        parentEmail: manualParentEmail ? manualParentEmail.toLowerCase() : "",
+        parentName: manualParentName
+      });
 
-    // Agregar al estado local
-    setStudents(prev => [...prev, newStudent]);
+      // Guardar en localStorage para compatibilidad
+      localStorage.setItem("simulatedStudentName", manualStudentName);
+      localStorage.setItem("simulatedCategory", category);
+      localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
+      localStorage.setItem("simulatedParentName", manualParentName);
 
-    // Guardar en localStorage para pruebas de portal de acudientes
-    localStorage.setItem("simulatedStudentName", manualStudentName);
-    localStorage.setItem("simulatedCategory", category);
-    localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
-    localStorage.setItem("simulatedParentName", manualParentName);
+      // 2. Registrar en Firebase Auth usando una aplicación secundaria para no desloguear al admin
+      if (manualParentEmail && manualParentPassword) {
+        try {
+          const config = auth.app.options;
+          const tempApp = initializeApp(config, "TempAdminRegisterApp");
+          const tempAuth = getAuth(tempApp);
+          
+          const userCredential = await createUserWithEmailAndPassword(tempAuth, manualParentEmail.toLowerCase(), manualParentPassword);
+          const user = userCredential.user;
+          
+          // Registrar en 'users'
+          await setDoc(doc(db, "users", manualParentEmail.toLowerCase()), {
+            uid: user.uid,
+            email: manualParentEmail.toLowerCase(),
+            role: "parent",
+            name: manualParentName || (manualStudentName + " Acudiente"),
+            phone: manualParentPhone || "",
+            studentName: manualStudentName,
+            categoryName: category,
+            status: manualPaidCash ? "active" : "suspended"
+          });
 
-    // Registrar usuario en la base de datos simulada de registeredUsers
-    if (manualParentEmail && manualParentPassword) {
-      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-      const emailExists = users.some(u => u.email.toLowerCase() === manualParentEmail.toLowerCase());
-      if (!emailExists) {
-        const newUser = {
-          email: manualParentEmail.toLowerCase(),
-          password: manualParentPassword,
-          role: "parent",
-          name: manualParentName || (manualStudentName + " Acudiente"),
-          phone: manualParentPhone || "",
+          await signOut(tempAuth);
+          await deleteApp(tempApp);
+        } catch (err) {
+          console.error("Error creando cuenta en Auth secundario:", err);
+          // Si ya existe el usuario, de todas formas agregamos/actualizamos el doc de su perfil
+          if (err.code === "auth/email-already-in-use") {
+            await setDoc(doc(db, "users", manualParentEmail.toLowerCase()), {
+              email: manualParentEmail.toLowerCase(),
+              role: "parent",
+              name: manualParentName || (manualStudentName + " Acudiente"),
+              phone: manualParentPhone || "",
+              studentName: manualStudentName,
+              categoryName: category,
+              status: manualPaidCash ? "active" : "suspended"
+            }, { merge: true });
+          }
+        }
+      }
+
+      // 3. Si pagó en efectivo/transferencia directa, registrar en Firestore pagos
+      if (manualPaidCash) {
+        await addDoc(collection(db, "payments"), {
           studentName: manualStudentName,
           categoryName: category,
-          status: manualPaidCash ? "active" : "suspended"
-        };
-        users.push(newUser);
-        localStorage.setItem("registeredUsers", JSON.stringify(users));
+          amount: manualPaymentConcept === "monthly" ? 300 : 50,
+          paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
+          date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+          status: "approved",
+          parentEmail: manualParentEmail ? manualParentEmail.toLowerCase() : ""
+        });
       }
-    }
-
-    // Si pagó en efectivo/transferencia directa, registrar en el historial de pagos
-    if (manualPaidCash) {
-      const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-      const cashPayment = {
-        id: Date.now() + 1,
-        studentName: manualStudentName,
-        categoryName: category,
-        amount: manualPaymentConcept === "monthly" ? 300 : 50,
-        paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
-        date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
-        status: "approved"
-      };
-      pendingList.push(cashPayment);
-      localStorage.setItem("pendingPayments", JSON.stringify(pendingList));
+    } catch (err) {
+      console.error("Error en registro manual de Firestore:", err);
     }
 
     // Resetear form
@@ -282,21 +324,21 @@ export default function AdminDashboard() {
   };
 
   // Aplicar override manual de categoría
-  const handleApplyOverride = (e) => {
+  const handleApplyOverride = async (e) => {
     e.preventDefault();
     if (!selectedStudent) return;
 
-    setStudents(prev => prev.map(s => {
-      if (s.id === selectedStudent.id) {
-        return {
-          ...s,
-          category: newCategory,
-          assignment: "manual",
-          overrideReason: overrideReason || "Ajuste manual del cuerpo técnico"
-        };
-      }
-      return s;
-    }));
+    try {
+      // Modificar en Firestore
+      const studentRef = doc(db, "students", selectedStudent.name);
+      await updateDoc(studentRef, {
+        category: newCategory,
+        assignment: "manual",
+        overrideReason: overrideReason || "Ajuste manual del cuerpo técnico"
+      });
+    } catch (err) {
+      console.error("Error al aplicar override en Firestore:", err);
+    }
 
     setSelectedStudent(null);
     setNewCategory("");
@@ -304,14 +346,22 @@ export default function AdminDashboard() {
   };
 
   // Enviar mensaje masivo
-  const handleSendNotification = (e) => {
+  const handleSendNotification = async (e) => {
     e.preventDefault();
-    localStorage.setItem("adminNotice", notificationText);
-    setNotificationStatus(true);
-    setTimeout(() => {
-      setNotificationStatus(false);
-      setNotificationText("");
-    }, 3000);
+    try {
+      await setDoc(doc(db, "settings", "announcements"), {
+        notice: notificationText,
+        date: new Date().toISOString()
+      });
+      localStorage.setItem("adminNotice", notificationText);
+      setNotificationStatus(true);
+      setTimeout(() => {
+        setNotificationStatus(false);
+        setNotificationText("");
+      }, 3000);
+    } catch (err) {
+      console.error("Error en envío de comunicado a Firestore:", err);
+    }
   };
 
   return (

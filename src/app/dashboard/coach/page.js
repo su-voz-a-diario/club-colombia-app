@@ -1,24 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, doc, onSnapshot, setDoc, query, where } from "firebase/firestore";
 
 export default function CoachDashboard() {
-  // Lista de alumnos de la categoría asignada (Sub-10 Competitivo)
-  const [attendance, setAttendance] = useState([
-    { id: 1, name: "Juan Andrés García", status: null },
-    { id: 2, name: "Mateo Ospina Díaz", status: null },
-    { id: 3, name: "Sebastián Bedoya", status: null },
-    { id: 4, name: "Santiago Valencia", status: null },
-    { id: 5, name: "Nicolás Restrepo", status: null }
-  ]);
-
+  const [students, setStudents] = useState([]);
+  const [attendance, setAttendance] = useState([]);
   const [activeTab, setActiveTab] = useState("attendance"); // 'attendance' | 'evaluation'
   const [attendanceSaved, setAttendanceSaved] = useState(false);
 
   // Estados para evaluación técnica
-  const [selectedStudent, setSelectedStudent] = useState(1);
+  const [selectedStudent, setSelectedStudent] = useState("");
   const [speed, setSpeed] = useState(7);
   const [passing, setPassing] = useState(8);
   const [dribbling, setDribbling] = useState(6);
@@ -28,31 +23,77 @@ export default function CoachDashboard() {
   const [tacticalNotes, setTacticalNotes] = useState("");
   const [evaluationSaved, setEvaluationSaved] = useState(false);
 
-  // Simular guardado de asistencia
-  const saveAttendance = () => {
-    setAttendanceSaved(true);
-    setTimeout(() => setAttendanceSaved(false), 3000);
+  useEffect(() => {
+    // Escuchar alumnos de la categoría "Sub-10 Competitivo" en tiempo real
+    const q = query(collection(db, "students"), where("category", "==", "Sub-10 Competitivo"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const studs = [];
+      snapshot.forEach((doc) => {
+        studs.push({ id: doc.id, ...doc.data() });
+      });
+      setStudents(studs);
+      
+      // Inicializar estado de asistencia
+      setAttendance(studs.map(s => ({
+        id: s.id,
+        name: s.name,
+        status: null
+      })));
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Guardar reporte de asistencia en Firestore
+  const saveAttendance = async () => {
+    try {
+      const dateStr = new Date().toLocaleDateString("es-CO");
+      await setDoc(doc(db, "attendance", `Sub10-${dateStr.replace(/\//g, "-")}`), {
+        date: dateStr,
+        category: "Sub-10 Competitivo",
+        records: attendance.map(a => ({ name: a.name, status: a.status || "P" })),
+        timestamp: new Date().toISOString()
+      });
+      setAttendanceSaved(true);
+      setTimeout(() => setAttendanceSaved(false), 3000);
+    } catch (err) {
+      console.error("Error al guardar asistencia en Firestore:", err);
+    }
   };
 
-
-  // Simular guardado de evaluación técnica
-  const saveEvaluation = (e) => {
+  // Guardar reporte de evaluación técnica en Firestore y local
+  const saveEvaluation = async (e) => {
     e.preventDefault();
-    setEvaluationSaved(true);
+    if (!selectedStudent) return;
 
-    // Guardar en localStorage para que el Dashboard del Padre lo lea dinámicamente si es Juan Andrés (ID 1)
-    if (Number(selectedStudent) === 1) {
+    try {
+      const targetName = selectedStudent;
       const metricsObj = { speed, passing, dribbling, shooting, physical, discipline };
-      localStorage.setItem("simulatedMetrics", JSON.stringify(metricsObj));
-      localStorage.setItem("simulatedNotes", tacticalNotes);
-    }
+      
+      await setDoc(doc(db, "evaluations", targetName), {
+        studentName: targetName,
+        metrics: metricsObj,
+        tacticalNotes: tacticalNotes,
+        date: new Date().toLocaleDateString("es-CO"),
+        timestamp: new Date().toISOString()
+      });
 
-    setTimeout(() => {
-      setEvaluationSaved(false);
-      // Resetear sliders
-      setSpeed(7); setPassing(8); setDribbling(6); setShooting(7); setPhysical(8); setDiscipline(9);
-      setTacticalNotes("");
-    }, 3000);
+      // Guardar en localStorage para mantener compatibilidad si es Juan Andrés García
+      if (targetName === "Juan Andrés García") {
+        localStorage.setItem("simulatedMetrics", JSON.stringify(metricsObj));
+        localStorage.setItem("simulatedNotes", tacticalNotes);
+      }
+
+      setEvaluationSaved(true);
+      setTimeout(() => {
+        setEvaluationSaved(false);
+        // Resetear sliders
+        setSpeed(7); setPassing(8); setDribbling(6); setShooting(7); setPhysical(8); setDiscipline(9);
+        setTacticalNotes("");
+      }, 3000);
+    } catch (err) {
+      console.error("Error al guardar evaluación en Firestore:", err);
+    }
   };
 
   return (
@@ -189,11 +230,10 @@ export default function CoachDashboard() {
                 onChange={(e) => setSelectedStudent(e.target.value)}
                 className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
               >
-                <option value={1}>Juan Andrés García</option>
-                <option value={2}>Mateo Ospina Díaz</option>
-                <option value={3}>Sebastián Bedoya</option>
-                <option value={4}>Santiago Valencia</option>
-                <option value={5}>Nicolás Restrepo</option>
+                <option value="">-- Seleccionar Atleta --</option>
+                {students.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
               </select>
             </div>
 

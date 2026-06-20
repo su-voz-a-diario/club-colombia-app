@@ -6,15 +6,19 @@ import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot, updateDoc, collection, addDoc, query, where } from "firebase/firestore";
 
 export default function ParentDashboard() {
   const [studentName, setStudentName] = useState("Juan Andrés García");
   const [categoryName, setCategoryName] = useState("Sub-10 Competitivo");
-  const [studentStatus, setStudentStatus] = useState("suspended"); // Inicialmente suspendido para mostrar el flujo de reactivación por mora
+  const [studentStatus, setStudentStatus] = useState("suspended"); // 'active' | 'suspended' | 'pending_validation' | 'on_hold'
   const [activeTab, setActiveTab] = useState("performance"); // 'performance' | 'billing' | 'gallery'
   const [myPayments, setMyPayments] = useState([]);
+  const [representativeName, setRepresentativeName] = useState("Ricardo García");
+  const [userEmail, setUserEmail] = useState("");
 
-  // Métricas del deportista (leídas de localStorage si el entrenador las actualizó)
+  // Métricas del deportista (leídas en tiempo real de Firestore)
   const [metrics, setMetrics] = useState({
     speed: 8,
     passing: 7,
@@ -27,52 +31,109 @@ export default function ParentDashboard() {
     "Juan Andrés ha mostrado un crecimiento excepcional en velocidad y juego colectivo. Debe continuar trabajando en su perfil izquierdo durante los tiros libres."
   );
 
-  // Leer posibles estados simulados al cargar
-  // Leer posibles estados simulados al cargar y de forma periódica para la demo
+  // Helper para leer cookies en el cliente
+  const getCookie = (name) => {
+    if (typeof document === "undefined") return "";
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return "";
+  };
+
   useEffect(() => {
-    const updateStates = () => {
-      const simName = localStorage.getItem("simulatedStudentName") || "Juan Andrés García";
-      const simCat = localStorage.getItem("simulatedCategory");
-      const simStatus = localStorage.getItem("simulatedStatus");
-      setStudentName(simName);
-      if (simCat) setCategoryName(simCat);
-      if (simStatus) setStudentStatus(simStatus);
+    const email = getCookie("user-email") || "ricardo.garcia@gmail.com";
+    setUserEmail(email);
 
-      // Si el entrenador guardó calificaciones
-      const simMetrics = localStorage.getItem("simulatedMetrics");
-      const simNotes = localStorage.getItem("simulatedNotes");
-      if (simMetrics) setMetrics(JSON.parse(simMetrics));
-      if (simNotes) setCoachNotes(simNotes);
+    // 1. Escuchar perfil del usuario en Firestore
+    const unsubscribeUser = onSnapshot(doc(db, "users", email.toLowerCase()), (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+        if (userData.name) setRepresentativeName(userData.name);
+        if (userData.studentName) setStudentName(userData.studentName);
+        if (userData.categoryName) setCategoryName(userData.categoryName);
+        if (userData.status) {
+          setStudentStatus(userData.status);
+          document.cookie = `user-status=${userData.status}; path=/; max-age=86400`;
+        }
+      }
+    });
 
-      // Cargar mis pagos reportados
-      const pending = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-      setMyPayments(pending.filter(p => p.studentName === simName));
+    return () => {
+      unsubscribeUser();
     };
-
-    updateStates();
-
-    // Intervalo de consulta para simular sincronización instantánea
-    const interval = setInterval(updateStates, 2000);
-    return () => clearInterval(interval);
   }, []);
 
-  const handlePaymentSuccess = (amount, paymentLabel) => {
-    setStudentStatus("pending_validation");
-    localStorage.setItem("simulatedStatus", "pending_validation");
+  // Escuchar estudiante, evaluaciones y pagos correspondientes una vez que sabemos el nombre del estudiante y el correo
+  useEffect(() => {
+    if (!studentName || !userEmail) return;
 
-    // Guardar solicitud de validación para el Administrador en localStorage
-    const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-    const newRequest = {
-      id: Date.now(),
-      studentName: studentName,
-      categoryName: categoryName,
-      amount: amount,
-      paymentType: paymentLabel,
-      date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
-      status: "pending"
+    // 2. Escuchar datos dinámicos del estudiante (como cambios en categoría por overrides)
+    const unsubscribeStudent = onSnapshot(doc(db, "students", studentName), (docSnap) => {
+      if (docSnap.exists()) {
+        const studentData = docSnap.data();
+        if (studentData.category) setCategoryName(studentData.category);
+        if (studentData.status) setStudentStatus(studentData.status);
+      }
+    });
+
+    // 3. Escuchar calificaciones técnicas en Firestore (de la colección 'evaluations')
+    const unsubscribeEval = onSnapshot(doc(db, "evaluations", studentName), (docSnap) => {
+      if (docSnap.exists()) {
+        const evalData = docSnap.data();
+        if (evalData.metrics) setMetrics(evalData.metrics);
+        if (evalData.tacticalNotes) setCoachNotes(evalData.tacticalNotes);
+      }
+    });
+
+    // 4. Escuchar historial de pagos del usuario en Firestore
+    const qPays = query(collection(db, "payments"), where("parentEmail", "==", userEmail.toLowerCase()));
+    const unsubscribePayments = onSnapshot(qPays, (snapshot) => {
+      const pays = [];
+      snapshot.forEach((doc) => {
+        pays.push({ id: doc.id, ...doc.data() });
+      });
+      setMyPayments(pays);
+    });
+
+    return () => {
+      unsubscribeStudent();
+      unsubscribeEval();
+      unsubscribePayments();
     };
-    pendingList.push(newRequest);
-    localStorage.setItem("pendingPayments", JSON.stringify(pendingList));
+  }, [studentName, userEmail]);
+
+  const handlePaymentSuccess = async (amount, paymentLabel) => {
+    if (!userEmail || !studentName) return;
+
+    try {
+      // 1. Guardar solicitud en la colección 'payments' en Firestore
+      await addDoc(collection(db, "payments"), {
+        studentName: studentName,
+        categoryName: categoryName,
+        amount: amount,
+        paymentType: paymentLabel,
+        date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+        status: "pending",
+        parentEmail: userEmail.toLowerCase()
+      });
+
+      // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario, del estudiante y cookies
+      await updateDoc(doc(db, "users", userEmail.toLowerCase()), {
+        status: "pending_validation"
+      });
+
+      await updateDoc(doc(db, "students", studentName), {
+        status: "pending_validation",
+        dueDays: 0
+      });
+
+      localStorage.setItem("simulatedStatus", "pending_validation");
+      document.cookie = `user-status=pending_validation; path=/; max-age=86400`;
+
+      setStudentStatus("pending_validation");
+    } catch (err) {
+      console.error("Error al reportar pago en Firestore:", err);
+    }
   };
 
   return (
@@ -85,7 +146,7 @@ export default function ParentDashboard() {
             <span className="font-display font-black text-xs uppercase tracking-wider text-slate-200 block">
               Portal Deportista <span className="text-[#10b981]">Club Colombia</span>
             </span>
-            <span className="text-[9px] text-slate-500 font-bold block mt-0.5">Representante: Ricardo García</span>
+            <span className="text-[9px] text-slate-500 font-bold block mt-0.5">Representante: {representativeName}</span>
           </div>
         </Link>
         <div className="flex items-center gap-4">

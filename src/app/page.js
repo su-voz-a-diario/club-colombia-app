@@ -4,28 +4,35 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, Trophy, QrCode, ChartBar, Users, ArrowRight, X, Calendar, Megaphone, Check } from "lucide-react";
 import RadarPerformance from "@/components/RadarPerformance";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 export default function Home() {
   const [activeModal, setActiveModal] = useState(null); // 'qr' | 'radar' | 'billing'
+  
   const [announcement, setAnnouncement] = useState({
     date: "17 de Junio, 2026",
     text: "Atención padres de familia: Los entrenamientos de la tarde para todas las categorías se realizarán con normalidad. Recordar traer el uniforme alternativo verde."
   });
 
-  // Cargar anuncio guardado por el administrador si existe
+  // Cargar anuncio guardado por el administrador si existe en Firestore
   useEffect(() => {
-    const savedNotice = localStorage.getItem("adminNotice");
-    if (savedNotice) {
-      const today = new Date().toLocaleDateString("es-CO", {
-        day: "numeric",
-        month: "long",
-        year: "numeric"
-      });
-      setAnnouncement({
-        date: today,
-        text: savedNotice
-      });
-    }
+    const unsubscribe = onSnapshot(doc(db, "settings", "announcements"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.notice) {
+          const dateLabel = data.date 
+            ? new Date(data.date).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })
+            : new Date().toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+          setAnnouncement({
+            date: dateLabel,
+            text: data.notice
+          });
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Simulación de valores de radar interactivos en el modal

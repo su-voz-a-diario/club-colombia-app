@@ -6,6 +6,9 @@ import { ShieldCheck, UserCheck, Users, Dumbbell, ArrowRight, UserPlus, LogIn, C
 import Link from "next/link";
 import PaymentSimulator from "@/components/PaymentSimulator";
 import QRGenerator from "@/components/QRGenerator";
+import { auth, db, seedFirebaseDatabase } from "@/lib/firebase";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore";
 
 export default function Login() {
   const router = useRouter();
@@ -27,7 +30,7 @@ export default function Login() {
   const [studentCategory, setStudentCategory] = useState(null);
   const [registerError, setRegisterError] = useState("");
 
-  // Inicialización de usuarios de prueba en localStorage y borrado de cookies (Logout)
+  // Inicialización de usuarios de prueba en Firebase y borrado de cookies (Logout)
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       // Limpiar cookies de sesión para asegurar que al estar en /login el usuario está deslogueado
@@ -35,36 +38,8 @@ export default function Login() {
       document.cookie = "user-email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
       document.cookie = "user-status=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
 
-      const defaultUsers = [
-        {
-          email: "luis.lopez@clubcolombia.com",
-          password: "luis123",
-          role: "admin",
-          name: "Profe Luis López",
-          status: "active"
-        },
-        {
-          email: "mario.silva@clubcolombia.com",
-          password: "mario123",
-          role: "coach",
-          name: "Entrenador Mario Silva",
-          status: "active"
-        },
-        {
-          email: "ricardo.garcia@gmail.com",
-          password: "ricardo123",
-          role: "parent",
-          name: "Ricardo García",
-          studentName: "Juan Andrés García",
-          categoryName: "Sub-10 Competitivo",
-          status: "suspended" // Inicia suspendido para mostrar el flujo de Banorte
-        }
-      ];
-
-      const existingUsers = localStorage.getItem("registeredUsers");
-      if (!existingUsers) {
-        localStorage.setItem("registeredUsers", JSON.stringify(defaultUsers));
-      }
+      // Sembrar base de datos si no existe
+      seedFirebaseDatabase();
     }
   }, []);
 
@@ -100,115 +75,156 @@ export default function Login() {
     setStudentCategory(cat);
   };
 
-  const handleNextStep = (e) => {
+  const handleNextStep = async (e) => {
     e.preventDefault();
     setRegisterError("");
     
     if (registerStep === 1 && studentCategory) {
-      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-      const emailExists = users.some(u => u.email.toLowerCase() === parentEmail.toLowerCase());
-      
-      if (emailExists) {
-        setRegisterError("El correo electrónico ya está registrado en la escuela. Por favor inicia sesión.");
-        return;
+      try {
+        const userDocRef = doc(db, "users", parentEmail.toLowerCase());
+        const userDocSnap = await getDoc(userDocRef);
+        
+        if (userDocSnap.exists()) {
+          setRegisterError("El correo electrónico ya está registrado en la escuela. Por favor inicia sesión.");
+          return;
+        }
+
+        // Registrar en Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, parentEmail.toLowerCase(), parentPassword);
+        const user = userCredential.user;
+
+        // Registrar perfil en la colección 'users'
+        await setDoc(doc(db, "users", parentEmail.toLowerCase()), {
+          uid: user.uid,
+          email: parentEmail.toLowerCase(),
+          role: "parent",
+          name: parentName,
+          phone: parentPhone,
+          studentName: studentName,
+          categoryName: studentCategory.name,
+          status: "suspended"
+        });
+
+        // Registrar deportista en la colección 'students'
+        const birthYear = new Date(birthDate).getFullYear();
+        const ageNum = 2026 - birthYear;
+        await setDoc(doc(db, "students", studentName), {
+          name: studentName,
+          age: ageNum || 9,
+          category: studentCategory.name,
+          assignment: "automatic",
+          status: "suspended",
+          dueDays: 7,
+          parentEmail: parentEmail.toLowerCase(),
+          parentName: parentName
+        });
+        
+        // Guardar sesión en cookies
+        document.cookie = `user-role=parent; path=/; max-age=86400`;
+        document.cookie = `user-email=${parentEmail.toLowerCase()}; path=/; max-age=86400`;
+        document.cookie = `user-status=suspended; path=/; max-age=86400`;
+        
+        // Guardar estados del alumno
+        localStorage.setItem("simulatedStudentName", studentName);
+        localStorage.setItem("simulatedCategory", studentCategory.name);
+        localStorage.setItem("simulatedStatus", "suspended");
+        
+        setRegisterStep(2);
+      } catch (err) {
+        console.error("Error en registro:", err);
+        if (err.code === "auth/email-already-in-use") {
+          setRegisterError("El correo electrónico ya está en uso. Por favor inicia sesión.");
+        } else if (err.code === "auth/weak-password") {
+          setRegisterError("La contraseña debe tener al menos 6 caracteres.");
+        } else {
+          setRegisterError("Ocurrió un error al registrar al usuario: " + err.message);
+        }
       }
-      
-      // Registrar al usuario temporalmente como suspendido hasta que pague
-      const newUser = {
-        email: parentEmail.toLowerCase(),
-        password: parentPassword,
-        role: "parent",
-        name: parentName,
-        phone: parentPhone,
-        studentName: studentName,
-        birthDate: birthDate,
-        categoryName: studentCategory.name,
-        status: "suspended"
-      };
-      
-      users.push(newUser);
-      localStorage.setItem("registeredUsers", JSON.stringify(users));
-      
-      // Guardar sesión en cookies
-      document.cookie = `user-role=parent; path=/; max-age=86400`;
-      document.cookie = `user-email=${parentEmail.toLowerCase()}; path=/; max-age=86400`;
-      document.cookie = `user-status=suspended; path=/; max-age=86400`;
-      
-      // Guardar estados del alumno
-      localStorage.setItem("simulatedStudentName", studentName);
-      localStorage.setItem("simulatedCategory", studentCategory.name);
-      localStorage.setItem("simulatedStatus", "suspended");
-      
-      setRegisterStep(2);
     }
   };
 
-  const handlePaymentCompleted = (amount, paymentLabel) => {
-    // Al simular el envío del depósito desde la pantalla de inscripción:
-    // 1. Guardar solicitud en pendingPayments para el Administrador
-    const pendingList = JSON.parse(localStorage.getItem("pendingPayments") || "[]");
-    const newRequest = {
-      id: Date.now(),
-      studentName: studentName,
-      categoryName: studentCategory.name,
-      amount: amount,
-      paymentType: paymentLabel,
-      date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
-      status: "pending"
-    };
-    pendingList.push(newRequest);
-    localStorage.setItem("pendingPayments", JSON.stringify(pendingList));
+  const handlePaymentCompleted = async (amount, paymentLabel) => {
+    try {
+      // 1. Guardar solicitud en pendingPayments en Firestore
+      await addDoc(collection(db, "payments"), {
+        studentName: studentName,
+        categoryName: studentCategory.name,
+        amount: amount,
+        paymentType: paymentLabel,
+        date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+        status: "pending",
+        parentEmail: parentEmail.toLowerCase()
+      });
 
-    // 2. Cambiar su estado a 'pending_validation' tanto en localStorage como en cookies
-    localStorage.setItem("simulatedStatus", "pending_validation");
-    document.cookie = `user-status=pending_validation; path=/; max-age=86400`;
+      // 2. Cambiar su estado a 'pending_validation' tanto en Firestore como en cookies y localStorage
+      const userRef = doc(db, "users", parentEmail.toLowerCase());
+      await updateDoc(userRef, {
+        status: "pending_validation"
+      });
 
-    // 3. Modificar su estado en el arreglo de usuarios registrados de localStorage
-    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-    const updatedUsers = users.map(u => {
-      if (u.email.toLowerCase() === parentEmail.toLowerCase()) {
-        return { ...u, status: "pending_validation" };
-      }
-      return u;
-    });
-    localStorage.setItem("registeredUsers", JSON.stringify(updatedUsers));
+      const studentRef = doc(db, "students", studentName);
+      await updateDoc(studentRef, {
+        status: "pending_validation",
+        dueDays: 0
+      });
 
-    setRegisterStep(3);
+      localStorage.setItem("simulatedStatus", "pending_validation");
+      document.cookie = `user-status=pending_validation; path=/; max-age=86400`;
+
+      setRegisterStep(3);
+    } catch (err) {
+      console.error("Error al reportar pago:", err);
+      setRegisterError("Error al reportar el pago en la base de datos: " + err.message);
+    }
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError("");
 
-    const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-    const user = users.find(
-      (u) => u.email.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword
-    );
+    try {
+      // 1. Iniciar sesión en Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail.toLowerCase(), loginPassword);
+      const authUser = userCredential.user;
 
-    if (!user) {
-      setLoginError("Correo electrónico o contraseña incorrectos.");
-      return;
-    }
+      // 2. Leer perfil del usuario de Firestore
+      const userDocRef = doc(db, "users", loginEmail.toLowerCase());
+      const userDocSnap = await getDoc(userDocRef);
 
-    // Escribir cookies de sesión
-    document.cookie = `user-role=${user.role}; path=/; max-age=86400`;
-    document.cookie = `user-email=${user.email}; path=/; max-age=86400`;
-    document.cookie = `user-status=${user.status || "active"}; path=/; max-age=86400`;
+      if (!userDocSnap.exists()) {
+        setLoginError("No se encontró el perfil de usuario en la base de datos.");
+        return;
+      }
 
-    // Sincronizar localStorage si es padre
-    if (user.role === "parent") {
-      localStorage.setItem("simulatedStudentName", user.studentName || "Juan Andrés García");
-      localStorage.setItem("simulatedCategory", user.categoryName || "Sub-10 Competitivo");
-      localStorage.setItem("simulatedStatus", user.status || "suspended");
-    }
+      const user = userDocSnap.data();
 
-    // Redirigir
-    if (user.role === "admin") {
-      router.push("/dashboard/admin");
-    } else if (user.role === "coach") {
-      router.push("/dashboard/coach");
-    } else if (user.role === "parent") {
-      router.push("/dashboard/parent");
+      // Escribir cookies de sesión
+      document.cookie = `user-role=${user.role}; path=/; max-age=86400`;
+      document.cookie = `user-email=${user.email}; path=/; max-age=86400`;
+      document.cookie = `user-status=${user.status || "active"}; path=/; max-age=86400`;
+
+      // Sincronizar localStorage si es padre
+      if (user.role === "parent") {
+        localStorage.setItem("simulatedStudentName", user.studentName || "Juan Andrés García");
+        localStorage.setItem("simulatedCategory", user.categoryName || "Sub-10 Competitivo");
+        localStorage.setItem("simulatedStatus", user.status || "suspended");
+      }
+
+      // Redirigir
+      if (user.role === "admin") {
+        router.push("/dashboard/admin");
+      } else if (user.role === "coach") {
+        router.push("/dashboard/coach");
+      } else if (user.role === "parent") {
+        router.push("/dashboard/parent");
+      }
+    } catch (err) {
+      console.error("Error en login:", err);
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        setLoginError("Correo electrónico o contraseña incorrectos.");
+      } else {
+        setLoginError("Error de conexión con el servidor: " + err.message);
+      }
     }
   };
 
