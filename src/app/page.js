@@ -88,7 +88,10 @@ export default function Home() {
           </span>
         </h1>
         <p className="text-[#10b981] font-display font-bold text-xs uppercase tracking-widest mt-4 z-10">
-          El futuro del fútbol se gestiona aquí.
+          Juntos somos más fuertes, juntos somos Colombia
+        </p>
+        <p className="text-slate-500 font-mono text-[9px] mt-1.5 z-10 uppercase tracking-widest">
+          1 Corintios 1:10
         </p>
 
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/60 border border-slate-800/80 mt-6 z-10">
