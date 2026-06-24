@@ -43,28 +43,15 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#07090e] selection:bg-brand-green selection:text-white">
       {/* Header / Navegación */}
-      <header className="sticky top-0 z-50 glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
-          <span className="font-display font-black text-lg tracking-wide uppercase text-slate-100">
+      <header className="sticky top-0 z-50 glass-panel border-b border-slate-900/60 px-6 py-3 flex items-center justify-center">
+        <Link href="/" className="flex flex-col items-center hover:opacity-90 transition-all text-center">
+          <span className="font-display font-black text-base sm:text-lg tracking-wide uppercase text-slate-100">
             Club <span className="text-[#10b981]">Colombia</span>
           </span>
+          <span className="text-[8px] sm:text-[9px] font-mono text-[#10b981] font-bold uppercase tracking-[0.2em] mt-0.5">
+            Escuela de Fútbol
+          </span>
         </Link>
-        
-        <div className="flex items-center gap-4">
-          <Link 
-            href="/login"
-            className="text-xs font-bold font-display text-slate-400 hover:text-slate-200 transition-all"
-          >
-            Ingresar
-          </Link>
-          <Link 
-            href="/login?tab=register"
-            className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-extrabold text-xs px-5 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 cursor-pointer"
-          >
-            Inscripción en Línea
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
       </header>
 
       {/* Hero Section */}
