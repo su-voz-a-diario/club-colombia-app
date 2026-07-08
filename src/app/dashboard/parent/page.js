@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2, Clock, AlertTriangle, Play, Pause, Activity, X } from "lucide-react";
+import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2, Clock, AlertTriangle, Play, Pause, Activity, X, Users } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
@@ -23,6 +23,10 @@ export default function ParentDashboard() {
   const [representativeName, setRepresentativeName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [parentUid, setParentUid] = useState("");
+  const [studentIds, setStudentIds] = useState([]);
+  const [isPendingAssignment, setIsPendingAssignment] = useState(false);
+  const [parentPhone, setParentPhone] = useState("");
+
 
   // Evaluaciones
   const [evalHistory, setEvalHistory] = useState([]);
@@ -98,23 +102,47 @@ export default function ParentDashboard() {
         const email = session.email ? session.email.toLowerCase() : "";
         setUserEmail(email);
         setParentUid(session.uid || "");
+        setParentPhone(session.phone || "");
 
         // 1. Escuchar perfil del usuario en Firestore
         const userDocId = session.role === "parent" ? session.uid : email;
         unsubscribeUser = onSnapshot(doc(db, "users", userDocId), (docSnap) => {
+          if (cancelled) return;
           if (docSnap.exists()) {
             const userData = docSnap.data();
             if (userData.displayName || userData.name) setRepresentativeName(userData.displayName || userData.name);
-            if (Array.isArray(userData.studentIds) && userData.studentIds.length > 0) {
-              setStudentId(userData.studentIds[0]);
+            
+            const ids = Array.isArray(userData.studentIds) ? userData.studentIds : [];
+            setStudentIds(ids);
+
+            if (ids.length > 0) {
+              setStudentId(ids[0]);
+              setIsPendingAssignment(false);
             } else if (userData.studentId) {
               setStudentId(userData.studentId);
+              setIsPendingAssignment(false);
+            } else {
+              setStudentId("");
+              setIsPendingAssignment(true);
             }
+
             if (userData.studentName) setStudentName(userData.studentName);
             if (userData.categoryName) setCategoryName(userData.categoryName);
-            if (userData.status) {
+            
+            // Si el rol es parent y está en pending_assignment, lo forzamos.
+            // Si no, dependemos del estado del estudiante más adelante.
+            if (userData.status === "pending_assignment") {
+              setIsPendingAssignment(true);
+              setStudentStatus("pending_assignment");
+            } else if (userData.status) {
               setStudentStatus(userData.status);
             }
+          } else {
+            // El documento del usuario no existe en la base de datos (Paso 5)
+            setStudentId("");
+            setStudentIds([]);
+            setIsPendingAssignment(true);
+            setStudentStatus("pending_assignment");
           }
         });
       } catch (err) {
@@ -321,7 +349,13 @@ export default function ParentDashboard() {
         <div className="md:col-span-1 flex flex-col items-center gap-6">
           <div className="text-center w-full">
             <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black mb-3">Ficha de Cancha</h3>
-            {studentName ? (
+            {isPendingAssignment ? (
+              <QRGenerator 
+                studentName="Pendiente de Asignación" 
+                status="pending_validation" 
+                token="CC-PENDIENTE" 
+              />
+            ) : studentName ? (
               <QRGenerator 
                 studentName={studentName} 
                 status={studentStatus || "suspended"} 
@@ -335,7 +369,7 @@ export default function ParentDashboard() {
           </div>
 
           {/* Semáforo de Salud */}
-          {studentStatus === "active" && (
+          {!isPendingAssignment && studentStatus === "active" && (
             <div className={`w-full border rounded-2xl p-4 flex flex-col gap-2 font-sans transition-all ${
               studentHealth === "injured" 
                 ? "bg-red-950/20 border-red-500/30 text-red-250" 
@@ -368,7 +402,7 @@ export default function ParentDashboard() {
 
 
           {/* Tarjetas de Alerta de Estado del Alumno */}
-          {studentStatus === "suspended" && (
+          {!isPendingAssignment && studentStatus === "suspended" && (
             <div className="bg-red-500/5 border border-red-500/15 p-4 rounded-2xl w-full text-center font-sans">
               <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider block">Mora Registrada</span>
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
@@ -377,7 +411,7 @@ export default function ParentDashboard() {
             </div>
           )}
 
-          {studentStatus === "pending_validation" && (
+          {!isPendingAssignment && studentStatus === "pending_validation" && (
             <div className="bg-amber-500/5 border border-amber-500/15 p-4 rounded-2xl w-full text-center font-sans animate-pulse-subtle">
               <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider block">Verificación Pendiente</span>
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
@@ -386,7 +420,7 @@ export default function ParentDashboard() {
             </div>
           )}
 
-          {studentStatus === "on_hold" && (
+          {!isPendingAssignment && studentStatus === "on_hold" && (
             <div className="bg-amber-500/5 border border-amber-500/15 p-4 rounded-2xl w-full text-center font-sans">
               <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider block">Pago bajo Aclaración</span>
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
@@ -396,40 +430,66 @@ export default function ParentDashboard() {
           )}
 
           {/* Menú de pestañas para móviles */}
-          <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-2 w-full grid grid-cols-3 gap-1">
-            <button
-              onClick={() => setActiveTab("performance")}
-              className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
-                activeTab === "performance" ? "bg-slate-800 text-[#10b981] border border-slate-700/50" : "text-slate-400"
-              }`}
-            >
-              <ChartBar className="w-3.5 h-3.5" />
-              Rendimiento
-            </button>
-            <button
-              onClick={() => setActiveTab("billing")}
-              className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
-                activeTab === "billing" ? "bg-slate-800 text-sky-400 border border-slate-700/50" : "text-slate-400"
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              Pagos
-            </button>
-            <button
-              onClick={() => setActiveTab("gallery")}
-              className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
-                activeTab === "gallery" ? "bg-slate-800 text-amber-500 border border-slate-700/50" : "text-slate-400"
-              }`}
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              Galería
-            </button>
-          </div>
+          {!isPendingAssignment && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-2 w-full grid grid-cols-3 gap-1">
+              <button
+                onClick={() => setActiveTab("performance")}
+                className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                  activeTab === "performance" ? "bg-slate-800 text-[#10b981] border border-slate-700/50" : "text-slate-400"
+                }`}
+              >
+                <ChartBar className="w-3.5 h-3.5" />
+                Rendimiento
+              </button>
+              <button
+                onClick={() => setActiveTab("billing")}
+                className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                  activeTab === "billing" ? "bg-slate-800 text-sky-400 border border-slate-700/50" : "text-slate-400"
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                Pagos
+              </button>
+              <button
+                onClick={() => setActiveTab("gallery")}
+                className={`py-2 rounded-xl text-[10px] font-bold font-display transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                  activeTab === "gallery" ? "bg-slate-800 text-amber-500 border border-slate-700/50" : "text-slate-400"
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Galería
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Dynamic Content Tab or Lock Overlay */}
         <div className="md:col-span-2 relative">
-          {!studentName ? (
+          {isPendingAssignment ? (
+            <div className="bg-[#0e121e]/80 border border-slate-900 rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden backdrop-blur-md font-sans">
+              <div className="absolute -right-10 -bottom-10 opacity-[0.02] pointer-events-none">
+                <Users className="w-64 h-64 text-amber-500" />
+              </div>
+              <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center text-amber-500 animate-pulse">
+                <Users className="w-6 h-6" />
+              </div>
+              <div className="max-w-md space-y-2">
+                <span className="text-[9px] font-mono text-amber-500 font-black uppercase tracking-widest block">
+                  Asignación de Alumno Pendiente
+                </span>
+                <h2 className="font-display font-black text-lg sm:text-xl text-slate-100 uppercase tracking-wide">
+                  Sin alumnos vinculados
+                </h2>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Tu cuenta ha sido creada exitosamente con el teléfono <span className="text-slate-250 font-bold">{parentPhone}</span>.
+                  Actualmente no tienes ningún deportista asociado en la base de datos.
+                </p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Comunícate con el Profe Luis López para que registre la ficha de tu hijo en el club utilizando este mismo número telefónico. Una vez realizado el registro, tus datos se vincularán automáticamente al volver a ingresar.
+                </p>
+              </div>
+            </div>
+          ) : !studentName ? (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-8 text-center text-xs text-slate-500 font-sans">
               Sin información disponible
             </div>

@@ -111,11 +111,18 @@ async function getPhoneParentProfile(decodedToken) {
   }
 
   const studentIds = await linkParentStudents(db, decodedToken.uid, phone);
+  studentIds.sort();
+
+  const hasStudents = studentIds.length > 0;
+  const determinedStatus = hasStudents
+    ? (existingProfile.status && existingProfile.status !== "pending_assignment" ? existingProfile.status : "active")
+    : (existingProfile.status || "pending_assignment");
+
   const patch = {
     uid: decodedToken.uid,
     phone,
     role: "parent",
-    status: existingProfile.status || "active",
+    status: determinedStatus,
     studentIds,
     updatedAt: new Date()
   };
@@ -125,7 +132,18 @@ async function getPhoneParentProfile(decodedToken) {
     patch.createdAt = new Date();
   }
 
-  await userRef.set(patch, { merge: true });
+  // Idempotency check: only write to database if data has changed
+  const existingStudentIds = Array.isArray(existingProfile.studentIds) ? [...existingProfile.studentIds].sort() : [];
+  const needsWrite =
+    !userSnap.exists ||
+    existingProfile.phone !== phone ||
+    existingProfile.role !== "parent" ||
+    existingProfile.status !== determinedStatus ||
+    JSON.stringify(existingStudentIds) !== JSON.stringify(studentIds);
+
+  if (needsWrite) {
+    await userRef.set(patch, { merge: true });
+  }
 
   return buildSessionFromProfile(decodedToken, {
     ...existingProfile,

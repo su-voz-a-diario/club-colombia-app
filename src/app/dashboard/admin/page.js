@@ -273,7 +273,11 @@ export default function AdminDashboard() {
         await updateDoc(doc(db, "students", d.id), { status: "suspended" });
         // También actualizar en user
         const studentData = d.data();
-        if (studentData.parentEmail) {
+        if (studentData.parentUid) {
+          await updateDoc(doc(db, "users", studentData.parentUid), { status: "suspended" });
+        } else if (studentData.parentEmail) {
+          // Legacy compatibility
+          // TODO: eliminar cuando toda la base de datos tenga parentUid
           await updateDoc(doc(db, "users", studentData.parentEmail.toLowerCase()), { status: "suspended" });
         }
       }
@@ -323,8 +327,11 @@ export default function AdminDashboard() {
         updatedAt: serverTimestamp()
       });
 
-      // Actualizar el perfil del padre
-      if (studentData.parentEmail) {
+      if (studentData.parentUid) {
+        await updateDoc(doc(db, "users", studentData.parentUid), { status: "active" });
+      } else if (studentData.parentEmail) {
+        // Legacy compatibility
+        // TODO: eliminar cuando toda la base de datos tenga parentUid
         const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
         await updateDoc(parentRef, {
           status: "active"
@@ -355,8 +362,11 @@ export default function AdminDashboard() {
           updatedAt: serverTimestamp()
         });
 
-        // 3. Actualizar la base de datos de usuarios
-        if (studentData.parentEmail) {
+        if (studentData.parentUid) {
+          await updateDoc(doc(db, "users", studentData.parentUid), { status: "active" });
+        } else if (studentData.parentEmail) {
+          // Legacy compatibility
+          // TODO: eliminar cuando toda la base de datos tenga parentUid
           const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
           await updateDoc(parentRef, { status: "active" });
         }
@@ -381,8 +391,11 @@ export default function AdminDashboard() {
         const studentData = studentSnap.data();
         await updateDoc(studentDocRef, { status: "on_hold", billingStatus: "on_hold", updatedAt: serverTimestamp() });
 
-        // 3. Actualizar la base de datos de usuarios
-        if (studentData.parentEmail) {
+        if (studentData.parentUid) {
+          await updateDoc(doc(db, "users", studentData.parentUid), { status: "on_hold" });
+        } else if (studentData.parentEmail) {
+          // Legacy compatibility
+          // TODO: eliminar cuando toda la base de datos tenga parentUid
           const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
           await updateDoc(parentRef, { status: "on_hold" });
         }
