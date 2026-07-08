@@ -1,87 +1,170 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { ShieldCheck, LogOut, ChartBar, CreditCard, Image as ImageIcon, Sparkles, Trophy, Calendar, CheckCircle2, Clock, AlertTriangle, Play, Pause, Activity, X } from "lucide-react";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, updateDoc, collection, addDoc, query, where } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
+
 
 export default function ParentDashboard() {
-  const [studentName, setStudentName] = useState("Juan Andrés García");
-  const [categoryName, setCategoryName] = useState("Sub-10 Competitivo");
-  const [studentStatus, setStudentStatus] = useState("suspended"); // 'active' | 'suspended' | 'pending_validation' | 'on_hold'
+  const [studentName, setStudentName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [categoryName, setCategoryName] = useState("");
+  const [studentStatus, setStudentStatus] = useState(""); // 'active' | 'suspended' | 'pending_validation' | 'on_hold'
+  const [studentHealth, setStudentHealth] = useState("optimal"); // 'optimal' | 'fatigue' | 'injured'
   const [activeTab, setActiveTab] = useState("performance"); // 'performance' | 'billing' | 'gallery'
+  const [activeSubTab, setActiveSubTab] = useState("stats"); // 'stats' | 'calendar' | 'drills'
   const [myPayments, setMyPayments] = useState([]);
-  const [representativeName, setRepresentativeName] = useState("Ricardo García");
+  const [representativeName, setRepresentativeName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [parentUid, setParentUid] = useState("");
 
-  // Métricas del deportista (leídas en tiempo real de Firestore)
-  const [metrics, setMetrics] = useState({
-    speed: 8,
-    passing: 7,
-    dribbling: 9,
-    shooting: 8,
-    physical: 8,
-    discipline: 9
-  });
-  const [coachNotes, setCoachNotes] = useState(
-    "Juan Andrés ha mostrado un crecimiento excepcional en velocidad y juego colectivo. Debe continuar trabajando en su perfil izquierdo durante los tiros libres."
-  );
+  // Evaluaciones
+  const [evalHistory, setEvalHistory] = useState([]);
+  const [chartMetric, setChartMetric] = useState("average"); // 'average' | 'speed' | 'passing' | ...
+  const [hoveredPoint, setHoveredPoint] = useState(null);
 
-  // Helper para leer cookies en el cliente
-  const getCookie = (name) => {
-    if (typeof document === "undefined") return "";
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return "";
-  };
+  // Microciclo y Biblioteca
+  const [events, setEvents] = useState([]);
+  const [drills, setDrills] = useState([]);
+  const videoRefs = useRef({});
+  const [mounted, setMounted] = useState(false);
+  const [activePlaybackRates, setActivePlaybackRates] = useState({});
+  const [rsvpFeedback, setRsvpFeedback] = useState({});
 
   useEffect(() => {
-    const email = getCookie("user-email") || "ricardo.garcia@gmail.com";
-    setUserEmail(email);
+    setMounted(true);
+  }, []);
 
-    // 1. Escuchar perfil del usuario en Firestore
-    const unsubscribeUser = onSnapshot(doc(db, "users", email.toLowerCase()), (docSnap) => {
-      if (docSnap.exists()) {
-        const userData = docSnap.data();
-        if (userData.name) setRepresentativeName(userData.name);
-        if (userData.studentName) setStudentName(userData.studentName);
-        if (userData.categoryName) setCategoryName(userData.categoryName);
-        if (userData.status) {
-          setStudentStatus(userData.status);
-          document.cookie = `user-status=${userData.status}; path=/; max-age=86400`;
-        }
-      }
+  const handleSetSpeed = (drillId, speed) => {
+    const vid = videoRefs.current[drillId];
+    if (vid) {
+      vid.playbackRate = speed;
+      setActivePlaybackRates(prev => ({ ...prev, [drillId]: speed }));
+    }
+  };
+
+  const getTrendData = () => {
+    return evalHistory.map(ev => {
+      const m = ev.metrics || {};
+      const avg = ((m.speed || 0) + (m.passing || 0) + (m.dribbling || 0) + (m.shooting || 0) + (m.physical || 0) + (m.discipline || 0)) / 6;
+      return {
+        date: ev.date || "",
+        speed: m.speed || 0,
+        passing: m.passing || 0,
+        dribbling: m.dribbling || 0,
+        shooting: m.shooting || 0,
+        physical: m.physical || 0,
+        discipline: m.discipline || 0,
+        average: Math.round(avg * 10) / 10
+      };
     });
+  };
+
+  const getMetricColor = (metric) => {
+    switch (metric) {
+      case "speed": return "#0ea5e9";
+      case "passing": return "#6366f1";
+      case "dribbling": return "#f59e0b";
+      case "shooting": return "#f43f5e";
+      case "physical": return "#f97316";
+      case "discipline": return "#d946ef";
+      case "average":
+      default:
+        return "#10b981";
+    }
+  };
+
+
+  // Métricas del deportista (última evaluación técnica)
+  const [metrics, setMetrics] = useState(null);
+  const [coachNotes, setCoachNotes] = useState("");
+
+  useEffect(() => {
+    let unsubscribeUser = null;
+    let cancelled = false;
+
+    const loadSession = async () => {
+      try {
+        const response = await fetch("/api/auth/session");
+        if (!response.ok) return;
+        const session = await response.json();
+        if (cancelled || !session.email) return;
+        const email = session.email.toLowerCase();
+        setUserEmail(email);
+        setParentUid(session.uid || "");
+
+        // 1. Escuchar perfil del usuario en Firestore
+        unsubscribeUser = onSnapshot(doc(db, "users", email), (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
+            if (userData.name) setRepresentativeName(userData.name);
+            if (userData.studentId) setStudentId(userData.studentId);
+            if (userData.studentName) setStudentName(userData.studentName);
+            if (userData.categoryName) setCategoryName(userData.categoryName);
+            if (userData.status) {
+              setStudentStatus(userData.status);
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Error al cargar sesión segura:", err);
+      }
+    };
+
+    loadSession();
 
     return () => {
-      unsubscribeUser();
+      cancelled = true;
+      if (unsubscribeUser) unsubscribeUser();
     };
   }, []);
 
   // Escuchar estudiante, evaluaciones y pagos correspondientes una vez que sabemos el nombre del estudiante y el correo
   useEffect(() => {
-    if (!studentName || !userEmail) return;
+    if ((!studentId && !studentName) || !userEmail) return;
 
-    // 2. Escuchar datos dinámicos del estudiante (como cambios en categoría por overrides)
-    const unsubscribeStudent = onSnapshot(doc(db, "students", studentName), (docSnap) => {
-      if (docSnap.exists()) {
+    // 2. Escuchar datos dinámicos del estudiante.
+    // Compatibilidad legacy: si el usuario aún no tiene studentId, se consulta por nombre temporalmente.
+    const studentRefOrQuery = studentId
+      ? doc(db, "students", studentId)
+      : query(collection(db, "students"), where("name", "==", studentName));
+
+    const unsubscribeStudent = onSnapshot(studentRefOrQuery, (snapshot) => {
+      const docSnap = studentId ? snapshot : snapshot.docs[0];
+      if (docSnap && docSnap.exists()) {
         const studentData = docSnap.data();
+        if (studentData.studentId && !studentId) setStudentId(studentData.studentId);
+        if (studentData.name) setStudentName(studentData.name);
         if (studentData.category) setCategoryName(studentData.category);
         if (studentData.status) setStudentStatus(studentData.status);
+        if (studentData.healthStatus) setStudentHealth(studentData.healthStatus);
       }
     });
 
-    // 3. Escuchar calificaciones técnicas en Firestore (de la colección 'evaluations')
-    const unsubscribeEval = onSnapshot(doc(db, "evaluations", studentName), (docSnap) => {
-      if (docSnap.exists()) {
-        const evalData = docSnap.data();
-        if (evalData.metrics) setMetrics(evalData.metrics);
-        if (evalData.tacticalNotes) setCoachNotes(evalData.tacticalNotes);
+    // 3. Escuchar historial de calificaciones técnicas en Firestore (de la colección 'evaluations')
+    const qEval = query(collection(db, "evaluations"), where("studentName", "==", studentName));
+    const unsubscribeEval = onSnapshot(qEval, (snapshot) => {
+      const history = [];
+      snapshot.forEach((doc) => {
+        history.push({ id: doc.id, ...doc.data() });
+      });
+      // Ordenar cronológicamente por timestamp
+      history.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      setEvalHistory(history);
+
+      if (history.length > 0) {
+        const latest = history[history.length - 1];
+        if (latest.metrics) setMetrics(latest.metrics);
+        if (latest.tacticalNotes) setCoachNotes(latest.tacticalNotes);
+      } else {
+        setMetrics(null);
+        setCoachNotes("");
       }
     });
 
@@ -95,12 +178,48 @@ export default function ParentDashboard() {
       setMyPayments(pays);
     });
 
+    // 5. Escuchar eventos de la categoría en Firestore (Microciclos)
+    const qEvents = query(collection(db, "events"), where("category", "==", categoryName));
+    const unsubscribeEvents = onSnapshot(qEvents, (snapshot) => {
+      const evs = [];
+      snapshot.forEach((doc) => {
+        evs.push({ id: doc.id, ...doc.data() });
+      });
+      evs.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      setEvents(evs);
+    });
+
+    // 6. Escuchar biblioteca de ejercicios multimedia (Drills)
+    const unsubscribeDrills = onSnapshot(collection(db, "drills"), (snapshot) => {
+      const drs = [];
+      snapshot.forEach((doc) => {
+        drs.push({ id: doc.id, ...doc.data() });
+      });
+      setDrills(drs);
+    });
+
     return () => {
       unsubscribeStudent();
       unsubscribeEval();
       unsubscribePayments();
+      unsubscribeEvents();
+      unsubscribeDrills();
     };
-  }, [studentName, userEmail]);
+  }, [studentId, studentName, userEmail, categoryName]);
+
+  // Manejar respuesta de RSVP
+  const handleRSVP = async (eventId, response) => {
+    try {
+      await updateDoc(doc(db, "events", eventId), {
+        [`rsvps.${studentName}`]: response
+      });
+      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50); // Vibración física ligera de confirmación
+      }
+    } catch (err) {
+      console.error("Error al actualizar RSVP:", err);
+    }
+  };
 
   const handlePaymentSuccess = async (amount, paymentLabel) => {
     if (!userEmail || !studentName) return;
@@ -108,27 +227,33 @@ export default function ParentDashboard() {
     try {
       // 1. Guardar solicitud en la colección 'payments' en Firestore
       await addDoc(collection(db, "payments"), {
+        studentId: studentId || "",
         studentName: studentName,
         categoryName: categoryName,
         amount: amount,
         paymentType: paymentLabel,
         date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
         status: "pending",
-        parentEmail: userEmail.toLowerCase()
+        parentEmail: userEmail.toLowerCase(),
+        parentUid: parentUid || "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
-      // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario, del estudiante y cookies
+      // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario y del estudiante
       await updateDoc(doc(db, "users", userEmail.toLowerCase()), {
         status: "pending_validation"
       });
 
-      await updateDoc(doc(db, "students", studentName), {
+      // Compatibilidad legacy: durante esta fase, solo usar nombre si todavía no existe studentId.
+      await updateDoc(doc(db, "students", studentId || studentName), {
         status: "pending_validation",
-        dueDays: 0
+        billingStatus: "pending_validation",
+        dueDays: 0,
+        updatedAt: serverTimestamp()
       });
 
       localStorage.setItem("simulatedStatus", "pending_validation");
-      document.cookie = `user-status=pending_validation; path=/; max-age=86400`;
 
       setStudentStatus("pending_validation");
     } catch (err) {
@@ -145,7 +270,9 @@ export default function ParentDashboard() {
             <span className="font-display font-black text-xs uppercase tracking-wider text-slate-200 block">
               Portal Deportista <span className="text-[#10b981]">Club Colombia</span>
             </span>
-            <span className="text-[9px] text-slate-500 font-bold block mt-0.5">Representante: {representativeName}</span>
+            <span className="text-[9px] text-slate-500 font-bold block mt-0.5">
+              Representante: {representativeName || "Sin información disponible"}
+            </span>
           </div>
         </Link>
         <div className="flex items-center gap-4">
@@ -187,12 +314,51 @@ export default function ParentDashboard() {
         <div className="md:col-span-1 flex flex-col items-center gap-6">
           <div className="text-center w-full">
             <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black mb-3">Ficha de Cancha</h3>
-            <QRGenerator 
-              studentName={studentName} 
-              status={studentStatus} 
-              token="CC-2026-8849" 
-            />
+            {studentName ? (
+              <QRGenerator 
+                studentName={studentName} 
+                status={studentStatus || "suspended"} 
+                token="Sin información disponible" 
+              />
+            ) : (
+              <div className="bg-[#0e121e] border border-slate-800 rounded-3xl p-6 text-center text-xs text-slate-500">
+                Sin información disponible
+              </div>
+            )}
           </div>
+
+          {/* Semáforo de Salud */}
+          {studentStatus === "active" && (
+            <div className={`w-full border rounded-2xl p-4 flex flex-col gap-2 font-sans transition-all ${
+              studentHealth === "injured" 
+                ? "bg-red-950/20 border-red-500/30 text-red-250" 
+                : studentHealth === "fatigue"
+                  ? "bg-amber-950/20 border-amber-500/30 text-amber-250"
+                  : "bg-emerald-950/20 border-emerald-500/30 text-emerald-250"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold uppercase tracking-wider block">Semáforo de Salud</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${
+                    studentHealth === "injured" 
+                      ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" 
+                      : studentHealth === "fatigue"
+                        ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]"
+                        : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+                  }`} />
+                  <span className="text-[10px] font-bold font-mono">
+                    {studentHealth === "injured" ? "LESIONADO" : studentHealth === "fatigue" ? "FATIGA" : "ÓPTIMO"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
+                {studentHealth === "injured" && "🔴 Reposo deportivo total. Evitar actividades de impacto. Protocolo de terapia activa bajo supervisión médica."}
+                {studentHealth === "fatigue" && "🟡 Carga muscular moderada. Se aconseja estiramiento preventivo de 15 minutos y descanso activo."}
+                {studentHealth === "optimal" && "🟢 Jugador en condiciones óptimas. Listo al 100% para la acción y la planificación táctica de la semana."}
+              </p>
+            </div>
+          )}
+
 
           {/* Tarjetas de Alerta de Estado del Alumno */}
           {studentStatus === "suspended" && (
@@ -256,39 +422,293 @@ export default function ParentDashboard() {
 
         {/* Right Column: Dynamic Content Tab or Lock Overlay */}
         <div className="md:col-span-2 relative">
-          {studentStatus === "active" ? (
+          {!studentName ? (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-8 text-center text-xs text-slate-500 font-sans">
+              Sin información disponible
+            </div>
+          ) : studentStatus === "active" ? (
             <>
-              {/* TAB 1: RENDIMIENTO (RADAR CHART) */}
+              {/* TAB 1: RENDIMIENTO */}
               {activeTab === "performance" && (
                 <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5">
-                  <div className="flex justify-between items-start">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
-                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Seguimiento de Desempeño</h2>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Informe consolidado de habilidades y comentarios del profesor.</p>
+                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Rendimiento Técnico y Físico</h2>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Gestión de habilidades, entrenamientos y material deportivo.</p>
                     </div>
                     <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[9px] font-bold text-[#10b981]">
                       <Trophy className="w-3 h-3" />
-                      {categoryName}
+                      {categoryName || "Sin información disponible"}
                     </div>
                   </div>
 
-                  {/* Fila superior: Radar + Detalle textual */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                    <RadarPerformance metrics={metrics} />
-                    
-                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
-                      <div className="flex items-center gap-1 text-[#10b981]">
-                        <Sparkles className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">Reporte Técnico Trimestral</span>
-                      </div>
-                      <h4 className="text-[10px] font-mono text-slate-500 uppercase">PROFESOR: Mario Silva</h4>
-                      <p className="text-xs text-slate-300 leading-relaxed italic">
-                        "{coachNotes}"
-                      </p>
-                    </div>
+                  {/* Sub-tabs menu */}
+                  <div className="border-b border-slate-850 flex gap-4 pt-1">
+                    <button
+                      onClick={() => setActiveSubTab("stats")}
+                      className={`pb-2.5 text-xs font-bold font-display transition-all border-b-2 cursor-pointer ${
+                        activeSubTab === "stats" ? "border-[#10b981] text-[#10b981]" : "border-transparent text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Habilidades y Historial
+                    </button>
+                    <button
+                      onClick={() => setActiveSubTab("calendar")}
+                      className={`pb-2.5 text-xs font-bold font-display transition-all border-b-2 cursor-pointer ${
+                        activeSubTab === "calendar" ? "border-[#10b981] text-[#10b981]" : "border-transparent text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Microciclo Semanal ({events.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveSubTab("drills")}
+                      className={`pb-2.5 text-xs font-bold font-display transition-all border-b-2 cursor-pointer ${
+                        activeSubTab === "drills" ? "border-[#10b981] text-[#10b981]" : "border-transparent text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Biblioteca ({drills.length})
+                    </button>
                   </div>
+
+                  {/* Sub-tab 1: stats (Radar + Comentarios + Recharts LineChart) */}
+                  {activeSubTab === "stats" && (
+                    <div className="space-y-5 animate-fade-in">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                        {metrics ? (
+                          <RadarPerformance metrics={metrics} />
+                        ) : (
+                          <div className="bg-[#07090e]/60 border border-slate-800/80 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                            No existen evaluaciones
+                          </div>
+                        )}
+                        
+                        <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                          <div className="flex items-center gap-1 text-[#10b981]">
+                            <Sparkles className="w-4 h-4" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider">Reporte Técnico Trimestral</span>
+                          </div>
+                          <h4 className="text-[10px] font-mono text-slate-500 uppercase">Observaciones del entrenador</h4>
+                          <p className="text-xs text-slate-300 leading-relaxed italic">
+                            {coachNotes || "Sin información disponible"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Recharts Historial Gráfico */}
+                      <div className="bg-[#07090e]/40 border border-slate-800/70 p-4 rounded-2xl space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                          <div>
+                            <h3 className="font-display font-bold text-xs uppercase tracking-wider text-slate-350">Historial de Calificaciones</h3>
+                            <p className="text-[9px] text-slate-500">Evolución de habilidades técnicas a lo largo de los microciclos.</p>
+                          </div>
+                          <select
+                            value={chartMetric}
+                            onChange={(e) => setChartMetric(e.target.value)}
+                            className="bg-[#07090e] border border-slate-800 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-brand-green font-sans"
+                          >
+                            <option value="average">Promedio General</option>
+                            <option value="speed">Velocidad</option>
+                            <option value="passing">Pase</option>
+                            <option value="dribbling">Regate</option>
+                            <option value="shooting">Tiro</option>
+                            <option value="physical">Físico</option>
+                            <option value="discipline">Disciplina</option>
+                          </select>
+                        </div>
+
+                        <div className="h-48 w-full">
+                          {mounted && evalHistory.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={getTrendData()} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#151b2d" />
+                                <XAxis dataKey="date" stroke="#475569" fontSize={8} tickLine={false} />
+                                <YAxis domain={[0, 10]} stroke="#475569" fontSize={8} tickLine={false} />
+                                <Tooltip
+                                  contentStyle={{ backgroundColor: "#0e121e", borderColor: "#1e293b", borderRadius: "10px" }}
+                                  labelStyle={{ color: "#94a3b8", fontSize: "9px", fontFamily: "monospace" }}
+                                  itemStyle={{ fontSize: "10px", fontWeight: "bold" }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey={chartMetric}
+                                  stroke={getMetricColor(chartMetric)}
+                                  strokeWidth={3}
+                                  dot={{ fill: getMetricColor(chartMetric), strokeWidth: 1, r: 3 }}
+                                  activeDot={{ r: 5 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center bg-slate-950/20 rounded-xl border border-slate-900 animate-pulse text-[9px] text-slate-600 font-mono">
+                              No existen evaluaciones
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sub-tab 2: calendar (Microciclos semanales con RSVP) */}
+                  {activeSubTab === "calendar" && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="font-display font-bold text-xs uppercase tracking-wider text-slate-350">Cronograma del Microciclo</h3>
+                          <p className="text-[9px] text-slate-500">Confirma la asistencia de tu hijo a las sesiones y partidos semanales.</p>
+                        </div>
+                      </div>
+
+                      {events.length === 0 ? (
+                        <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                          No hay eventos activos programados en este microciclo para la categoría.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {events.map((event) => {
+                            const userResponse = event.rsvps?.[studentName] || null;
+                            return (
+                              <div key={event.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                                <div className="flex justify-between items-start gap-4">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                        event.type === "match" ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-[#10b981]"
+                                      }`}>
+                                        {event.type === "match" ? "Partido" : "Entrenamiento"}
+                                      </span>
+                                      <span className="text-[9px] text-slate-500 font-mono">{event.date} • {event.time}</span>
+                                    </div>
+                                    <h4 className="font-bold text-slate-200 text-xs mt-1.5 truncate">{event.title}</h4>
+                                    <p className="text-[10px] text-slate-450 mt-1 leading-normal">{event.description}</p>
+                                    <div className="text-[9px] text-slate-500 font-mono mt-1">📍 {event.location}</div>
+                                  </div>
+                                </div>
+
+                                {/* RSVP Buttons & Feedback */}
+                                <div className="flex flex-col gap-2 border-t border-slate-900/60 pt-2.5">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={async () => {
+                                        await handleRSVP(event.id, "confirmed");
+                                        setRsvpFeedback(prev => ({ ...prev, [event.id]: "confirmed" }));
+                                        setTimeout(() => {
+                                          setRsvpFeedback(prev => ({ ...prev, [event.id]: null }));
+                                        }, 2500);
+                                      }}
+                                      className={`flex-1 py-2 rounded-xl text-[10px] font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                        userResponse === "confirmed"
+                                          ? "bg-[#10b981] text-slate-950 font-black shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                                          : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                                      }`}
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      Asistiré
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        await handleRSVP(event.id, "declined");
+                                        setRsvpFeedback(prev => ({ ...prev, [event.id]: "declined" }));
+                                        setTimeout(() => {
+                                          setRsvpFeedback(prev => ({ ...prev, [event.id]: null }));
+                                        }, 2500);
+                                      }}
+                                      className={`flex-1 py-2 rounded-xl text-[10px] font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                        userResponse === "declined"
+                                          ? "bg-red-500 text-slate-950 font-black shadow-[0_0_12px_rgba(239,68,68,0.25)]"
+                                          : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
+                                      }`}
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      No asistiré
+                                    </button>
+                                  </div>
+                                  
+                                  {rsvpFeedback[event.id] && (
+                                    <div className={`text-[9px] font-bold text-center py-1 rounded-lg animate-fade-in ${
+                                      rsvpFeedback[event.id] === "confirmed"
+                                        ? "text-[#10b981] bg-emerald-500/10 border border-emerald-500/20"
+                                        : "text-red-400 bg-red-500/10 border border-red-500/20"
+                                    }`}>
+                                      {rsvpFeedback[event.id] === "confirmed" ? "✓ Asistencia confirmada con éxito" : "✗ Inasistencia registrada"}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sub-tab 3: drills (Biblioteca con reproductor en cámara lenta) */}
+                  {activeSubTab === "drills" && (
+                    <div className="space-y-4 animate-fade-in">
+                      <div>
+                        <h3 className="font-display font-bold text-xs uppercase tracking-wider text-slate-350">Biblioteca de Entrenamiento</h3>
+                        <p className="text-[9px] text-slate-500">Videos didácticos asignados para repasar gestos técnicos en casa.</p>
+                      </div>
+
+                      {drills.length === 0 ? (
+                        <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                          No hay videos cargados actualmente en la biblioteca.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {drills.map((drill) => (
+                            <div key={drill.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col justify-between gap-3">
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className="text-[8px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-400 uppercase tracking-wider">{drill.category || "técnica"}</span>
+                                  <span className="text-[8px] text-slate-500 font-mono">{drill.date || ""}</span>
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-200 text-xs">{drill.title}</h4>
+                                  <p className="text-[10px] text-slate-400 leading-relaxed mt-1 font-sans">{drill.description}</p>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <video
+                                  ref={(el) => { videoRefs.current[drill.id] = el; }}
+                                  src={drill.videoUrl}
+                                  controls
+                                  playsInline
+                                  className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video object-cover"
+                                />
+
+                                {/* Playback speed controls */}
+                                <div className="flex items-center justify-between bg-[#07090e]/90 border border-slate-900 p-2.5 rounded-xl text-[10px]">
+                                  <span className="text-slate-450 font-bold uppercase tracking-wider font-sans">Velocidad</span>
+                                  <div className="flex gap-1.5">
+                                    {[0.5, 0.75, 1.0].map((speed) => {
+                                      const isSelected = activePlaybackRates[drill.id] === speed || (!activePlaybackRates[drill.id] && speed === 1.0);
+                                      return (
+                                        <button
+                                          key={speed}
+                                          onClick={() => handleSetSpeed(drill.id, speed)}
+                                          className={`px-2 py-1 rounded-md font-mono font-bold transition-all cursor-pointer ${
+                                            isSelected 
+                                              ? "bg-[#10b981] text-slate-950 font-black shadow" 
+                                              : "bg-slate-900 border border-slate-850 text-slate-400 hover:text-slate-200"
+                                          }`}
+                                        >
+                                          {speed}x
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
+
 
               {/* TAB 2: ESTADO DE CUENTA & PAGOS */}
               {activeTab === "billing" && (
@@ -299,8 +719,11 @@ export default function ParentDashboard() {
                   </div>
 
                   <div className="space-y-3">
-                    {/* Pagos Reportados Dinámicos (localStorage) */}
-                    {myPayments.map((payment) => (
+                    {myPayments.length === 0 ? (
+                      <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                        No hay pagos registrados
+                      </div>
+                    ) : myPayments.map((payment) => (
                       <div key={payment.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center animate-pulse-subtle">
                         <div>
                           <span className="font-bold text-xs text-slate-200 block">{payment.paymentType} (${payment.amount} MXN)</span>
@@ -324,42 +747,6 @@ export default function ParentDashboard() {
                         )}
                       </div>
                     ))}
-
-                    {/* Pago 1 */}
-                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-xs text-slate-200 block">Mensualidad Junio 2026 ($300 MXN)</span>
-                        <span className="text-[9px] text-slate-500 block mt-0.5">Vence: 05-Jun-2026 | Plan Mensual</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Pagado
-                      </div>
-                    </div>
-
-                    {/* Clase Individual */}
-                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-xs text-slate-200 block">Clase de Entrenamiento ($50 MXN)</span>
-                        <span className="text-[9px] text-slate-500 block mt-0.5">Entrenamiento: 20-May-2026 | Pago Único por Clase</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Pagado
-                      </div>
-                    </div>
-
-                    {/* Pago 2 */}
-                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-xs text-slate-200 block">Inscripción General Anual ($300 MXN)</span>
-                        <span className="text-[9px] text-slate-500 block mt-0.5">Cobrado el: 10-Ene-2026 | Pago Único</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[#10b981] bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Pagado
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -368,25 +755,12 @@ export default function ParentDashboard() {
               {activeTab === "gallery" && (
                 <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
                   <div>
-                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Galería de {categoryName}</h2>
+                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Galería de {categoryName || "Sin información disponible"}</h2>
                     <p className="text-[10px] text-slate-500 mt-0.5">Imágenes recientes de los entrenamientos y partidos de la categoría.</p>
                   </div>
 
-                  {/* Grid de Fotos Simuladas */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="group relative aspect-video bg-[#07090e] border border-slate-800 rounded-2xl overflow-hidden flex flex-col justify-end p-3.5 hover:border-brand-green transition-all">
-                      <div className="absolute top-2 left-2 bg-[#0e121e]/80 border border-slate-800 px-2 py-0.5 rounded text-[8px] font-mono text-slate-400">12-Jun-2026</div>
-                      <span className="font-display font-bold text-[10px] text-slate-100 truncate z-10 group-hover:text-[#10b981] transition-all">Entrenamiento de Regate</span>
-                      <span className="text-[8px] text-slate-500 block z-10">Cancha 2 - Profesor Mario</span>
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-70" />
-                    </div>
-
-                    <div className="group relative aspect-video bg-[#07090e] border border-slate-800 rounded-2xl overflow-hidden flex flex-col justify-end p-3.5 hover:border-brand-green transition-all">
-                      <div className="absolute top-2 left-2 bg-[#0e121e]/80 border border-slate-800 px-2 py-0.5 rounded text-[8px] font-mono text-slate-400">08-Jun-2026</div>
-                      <span className="font-display font-bold text-[10px] text-slate-100 truncate z-10 group-hover:text-[#10b981] transition-all">Charla Técnica Táctica</span>
-                      <span className="text-[8px] text-slate-500 block z-10">Camerino Central</span>
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-70" />
-                    </div>
+                  <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                    Aún no hay registros
                   </div>
                 </div>
               )}
@@ -412,13 +786,13 @@ export default function ParentDashboard() {
                 </h2>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   {studentStatus === "suspended" && (
-                    "Para ver las evaluaciones tácticas del Profe Mario Silva, consultar el cronograma de entrenamientos y ver la galería de fotos, es necesario realizar tu pago mensual de $300 MXN o pago por clase de $50 MXN a Banorte y reportar la transferencia abajo."
+                    "Para ver las evaluaciones tácticas, consultar el cronograma de entrenamientos y ver la galería de fotos, es necesario realizar tu pago mensual o pago por clase y reportar la transferencia abajo."
                   )}
                   {studentStatus === "pending_validation" && (
-                    "Tu transferencia directa Banorte ha sido reportada. El Profe Luis López está validando el dinero en la cuenta. El portal y tu credencial QR se desbloquearán de forma automática en cuanto confirme."
+                    "Tu transferencia directa ha sido reportada. La administración está validando el dinero en la cuenta. El portal y tu credencial QR se desbloquearán de forma automática en cuanto se confirme."
                   )}
                   {studentStatus === "on_hold" && (
-                    "El Profe Luis López no ha podido identificar tu transferencia en la cuenta Banorte o requiere aclaraciones. A continuación puedes volver a subir los detalles o reportar otro depósito."
+                    "La administración no ha podido identificar tu transferencia o requiere aclaraciones. A continuación puedes volver a subir los detalles o reportar otro depósito."
                   )}
                 </p>
               </div>
@@ -438,7 +812,7 @@ export default function ParentDashboard() {
                     Estado: Depositado (Por Validar)
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
-                    Tu reporte se envió exitosamente. El Profe Luis López verificará tu depósito en la tarjeta de Banorte. Puedes mantener abierta esta ventana; el portal se desbloqueará de forma automática.
+                    Tu reporte se envió exitosamente. La administración verificará tu depósito. Puedes mantener abierta esta ventana; el portal se desbloqueará de forma automática.
                   </p>
                 </div>
               )}

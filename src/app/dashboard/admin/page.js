@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles } from "lucide-react";
+import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
-import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs } from "firebase/firestore";
+import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
+import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 
@@ -44,12 +45,160 @@ export default function AdminDashboard() {
   // Cargar estudiantes y lista de validaciones de pago de Firestore
   const [pendingPayments, setPendingPayments] = useState([]);
 
+  // Event form states
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventType, setEventType] = useState("training");
+  const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [eventCategory, setEventCategory] = useState("Sub-10 Competitivo");
+  const [eventDescription, setEventDescription] = useState("");
+  const [eventSaved, setEventSaved] = useState(false);
+  const [events, setEvents] = useState([]);
+
+  // Drill form states
+  const [drillTitle, setDrillTitle] = useState("");
+  const [drillDescription, setDrillDescription] = useState("");
+  const [drillCategory, setDrillCategory] = useState("técnica");
+  const [drillVideoUrl, setDrillVideoUrl] = useState("");
+  const [drillSaved, setDrillSaved] = useState(false);
+  const [drills, setDrills] = useState([]);
+
+  // Leaderboard lists
+  const [evaluations, setEvaluations] = useState([]);
+  const [allAttendance, setAllAttendance] = useState([]);
+
+  const handleCreateEvent = async (e) => {
+    e.preventDefault();
+    if (!eventTitle || !eventDate || !eventTime) return;
+
+    try {
+      const eventId = eventTitle.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      await setDoc(doc(db, "events", eventId), {
+        title: eventTitle,
+        type: eventType,
+        date: eventDate,
+        time: eventTime,
+        location: eventLocation || "Club Colombia Cancha Principal",
+        category: eventCategory,
+        description: eventDescription,
+        rsvps: {}
+      });
+
+      setEventSaved(true);
+      setTimeout(() => {
+        setEventSaved(false);
+        setEventTitle("");
+        setEventDate("");
+        setEventTime("");
+        setEventLocation("");
+        setEventDescription("");
+      }, 2500);
+    } catch (err) {
+      console.error("Error creating event:", err);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    const confirmDel = window.confirm("¿Seguro que deseas eliminar este evento?");
+    if (!confirmDel) return;
+    try {
+      await deleteDoc(doc(db, "events", eventId));
+    } catch (err) {
+      console.error("Error deleting event:", err);
+    }
+  };
+
+  const handleCreateDrill = async (e) => {
+    e.preventDefault();
+    if (!drillTitle || !drillVideoUrl) return;
+
+    try {
+      const drillId = drillTitle.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      await setDoc(doc(db, "drills", drillId), {
+        title: drillTitle,
+        description: drillDescription,
+        category: drillCategory,
+        videoUrl: drillVideoUrl,
+        date: new Date().toLocaleDateString("es-CO")
+      });
+
+      setDrillSaved(true);
+      setTimeout(() => {
+        setDrillSaved(false);
+        setDrillTitle("");
+        setDrillDescription("");
+        setDrillVideoUrl("");
+      }, 2500);
+    } catch (err) {
+      console.error("Error creating drill:", err);
+    }
+  };
+
+  const handleDeleteDrill = async (drillId) => {
+    const confirmDel = window.confirm("¿Seguro que deseas eliminar este ejercicio?");
+    if (!confirmDel) return;
+    try {
+      await deleteDoc(doc(db, "drills", drillId));
+    } catch (err) {
+      console.error("Error deleting drill:", err);
+    }
+  };
+
+  const getLeaderboard = () => {
+    return students.map(student => {
+      // 1. Average rating
+      const studentEvals = evaluations.filter(ev => ev.studentName === student.name);
+      let avgScore = null;
+      if (studentEvals.length > 0) {
+        const sum = studentEvals.reduce((acc, curr) => {
+          const m = curr.metrics || {};
+          const itemAvg = ((m.speed || 0) + (m.passing || 0) + (m.dribbling || 0) + (m.shooting || 0) + (m.physical || 0) + (m.discipline || 0)) / 6;
+          return acc + itemAvg;
+        }, 0);
+        avgScore = sum / studentEvals.length;
+      }
+
+      // 2. Attendance rate
+      let totalSessions = 0;
+      let presentSessions = 0;
+      allAttendance.forEach(att => {
+        const record = att.records?.find(r => r.name === student.name);
+        if (record) {
+          totalSessions++;
+          if (record.status === "P" || record.status === "J") {
+            presentSessions++;
+          }
+        }
+      });
+      const attendanceRate = totalSessions > 0 ? (presentSessions / totalSessions) * 100 : null;
+
+      // 3. Score weighting
+      const overallPoints = avgScore !== null && attendanceRate !== null
+        ? (avgScore * 10) * 0.6 + attendanceRate * 0.4
+        : null;
+
+      return {
+        id: student.id,
+        name: student.name,
+        category: student.category,
+        avgScore: avgScore !== null ? Math.round(avgScore * 10) / 10 : null,
+        attendanceRate: attendanceRate !== null ? Math.round(attendanceRate) : null,
+        overallPoints: overallPoints !== null ? Math.round(overallPoints) : null
+      };
+    })
+      .filter(item => item.avgScore !== null || item.attendanceRate !== null)
+      .sort((a, b) => (b.overallPoints ?? -1) - (a.overallPoints ?? -1));
+  };
+
+
   useEffect(() => {
     // Escuchar estudiantes en tiempo real
     const unsubscribeStudents = onSnapshot(collection(db, "students"), (snapshot) => {
       const studs = [];
       snapshot.forEach((doc) => {
-        studs.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        studs.push({ id: doc.id, studentId: data.studentId || doc.id, ...data });
       });
       setStudents(studs);
     });
@@ -64,9 +213,50 @@ export default function AdminDashboard() {
       setPendingPayments(pays);
     });
 
+    // Escuchar evaluaciones para la tabla de honor
+    const unsubscribeEvals = onSnapshot(collection(db, "evaluations"), (snapshot) => {
+      const evs = [];
+      snapshot.forEach((doc) => {
+        evs.push({ id: doc.id, ...doc.data() });
+      });
+      setEvaluations(evs);
+    });
+
+    // Escuchar todas las asistencias para la tabla de honor
+    const unsubscribeAttendance = onSnapshot(collection(db, "attendance"), (snapshot) => {
+      const atts = [];
+      snapshot.forEach((doc) => {
+        atts.push({ id: doc.id, ...doc.data() });
+      });
+      setAllAttendance(atts);
+    });
+
+    // Escuchar todos los eventos
+    const unsubscribeEvents = onSnapshot(collection(db, "events"), (snapshot) => {
+      const evs = [];
+      snapshot.forEach((doc) => {
+        evs.push({ id: doc.id, ...doc.data() });
+      });
+      evs.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      setEvents(evs);
+    });
+
+    // Escuchar biblioteca de drills
+    const unsubscribeDrills = onSnapshot(collection(db, "drills"), (snapshot) => {
+      const drs = [];
+      snapshot.forEach((doc) => {
+        drs.push({ id: doc.id, ...doc.data() });
+      });
+      setDrills(drs);
+    });
+
     return () => {
       unsubscribeStudents();
       unsubscribePayments();
+      unsubscribeEvals();
+      unsubscribeAttendance();
+      unsubscribeEvents();
+      unsubscribeDrills();
     };
   }, []);
 
@@ -91,16 +281,6 @@ export default function AdminDashboard() {
         }
       }
       
-      // Sincronizar el estado simulado de Ricardo García si es moroso
-      const ricardoRef = doc(db, "users", "ricardo.garcia@gmail.com");
-      const ricardoSnap = await getDoc(ricardoRef);
-      if (ricardoSnap.exists()) {
-        const ricardoData = ricardoSnap.data();
-        if (ricardoData.status === "suspended") {
-          localStorage.setItem("simulatedStatus", "suspended");
-        }
-      }
-      
       setAlertSuccess(true);
       setTimeout(() => setAlertSuccess(false), 3000);
     } catch (err) {
@@ -110,24 +290,30 @@ export default function AdminDashboard() {
     }
   };
 
+  const getStudentDocRefByIdOrLegacyName = async (studentIdOrName) => {
+    let studentDocRef = doc(db, "students", studentIdOrName);
+    let studentSnap = await getDoc(studentDocRef);
+
+    if (!studentSnap.exists()) {
+      // Compatibilidad legacy: buscar por nombre solo para datos anteriores sin studentId.
+      const q = query(collection(db, "students"), where("name", "==", studentIdOrName));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        studentDocRef = doc(db, "students", qSnap.docs[0].id);
+        studentSnap = qSnap.docs[0];
+      }
+    }
+
+    return { studentDocRef, studentSnap };
+  };
+
   // Confirmar pago manual para levantar suspensión (Directo desde lista)
   const confirmManualPayment = async (studentIdOrName) => {
     try {
-      // Buscamos al estudiante por su ID de documento (el nombre en Firestore)
-      let studentDocRef = doc(db, "students", studentIdOrName);
-      let studentSnap = await getDoc(studentDocRef);
-      
-      // Si no existe por nombre, puede ser un ID numérico (de los iniciales), buscamos por query
+      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrName);
       if (!studentSnap.exists()) {
-        const q = query(collection(db, "students"), where("name", "==", studentIdOrName));
-        const qSnap = await getDocs(q);
-        if (!qSnap.empty) {
-          studentDocRef = doc(db, "students", qSnap.docs[0].id);
-          studentSnap = qSnap.docs[0];
-        } else {
-          console.error("No se encontró el alumno a confirmar pago manual:", studentIdOrName);
-          return;
-        }
+        console.error("No se encontró el alumno a confirmar pago manual:", studentIdOrName);
+        return;
       }
 
       const studentData = studentSnap.data();
@@ -135,7 +321,9 @@ export default function AdminDashboard() {
       // Actualizar en Firestore a 'active'
       await updateDoc(studentDocRef, {
         status: "active",
-        dueDays: 0
+        billingStatus: "paid",
+        dueDays: 0,
+        updatedAt: serverTimestamp()
       });
 
       // Actualizar el perfil del padre
@@ -146,31 +334,28 @@ export default function AdminDashboard() {
         });
       }
 
-      // Sincronizar localStorage para pruebas
-      if (studentData.name === "Juan Andrés García") {
-        localStorage.setItem("simulatedStatus", "active");
-      }
     } catch (err) {
       console.error("Error en confirmManualPayment:", err);
     }
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
-  const approvePendingPayment = async (paymentId, studentNameFromPayment) => {
+  const approvePendingPayment = async (paymentId, studentIdOrNameFromPayment) => {
     try {
       // 1. Marcar el pago como aprobado en Firestore
       const paymentRef = doc(db, "payments", paymentId);
-      await updateDoc(paymentRef, { status: "approved" });
+      await updateDoc(paymentRef, { status: "approved", updatedAt: serverTimestamp() });
 
       // 2. Reactivar al alumno en la colección 'students' de Firestore
-      const studentRef = doc(db, "students", studentNameFromPayment);
-      const studentSnap = await getDoc(studentRef);
+      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrNameFromPayment);
       
       if (studentSnap.exists()) {
         const studentData = studentSnap.data();
-        await updateDoc(studentRef, {
+        await updateDoc(studentDocRef, {
           status: "active",
-          dueDays: 0
+          billingStatus: "paid",
+          dueDays: 0,
+          updatedAt: serverTimestamp()
         });
 
         // 3. Actualizar la base de datos de usuarios
@@ -180,29 +365,24 @@ export default function AdminDashboard() {
         }
       }
 
-      // Sincronizar localStorage
-      if (studentNameFromPayment === "Juan Andrés García") {
-        localStorage.setItem("simulatedStatus", "active");
-      }
     } catch (err) {
       console.error("Error al aprobar pago:", err);
     }
   };
 
   // Poner una solicitud de pago en espera
-  const holdPendingPayment = async (paymentId, studentNameFromPayment) => {
+  const holdPendingPayment = async (paymentId, studentIdOrNameFromPayment) => {
     try {
       // 1. Marcar el pago como en espera en Firestore
       const paymentRef = doc(db, "payments", paymentId);
-      await updateDoc(paymentRef, { status: "on_hold" });
+      await updateDoc(paymentRef, { status: "on_hold", updatedAt: serverTimestamp() });
 
       // 2. Cambiar estado del alumno a en espera
-      const studentRef = doc(db, "students", studentNameFromPayment);
-      const studentSnap = await getDoc(studentRef);
+      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrNameFromPayment);
 
       if (studentSnap.exists()) {
         const studentData = studentSnap.data();
-        await updateDoc(studentRef, { status: "on_hold" });
+        await updateDoc(studentDocRef, { status: "on_hold", billingStatus: "on_hold", updatedAt: serverTimestamp() });
 
         // 3. Actualizar la base de datos de usuarios
         if (studentData.parentEmail) {
@@ -211,10 +391,6 @@ export default function AdminDashboard() {
         }
       }
 
-      // Sincronizar localStorage
-      if (studentNameFromPayment === "Juan Andrés García") {
-        localStorage.setItem("simulatedStatus", "on_hold");
-      }
     } catch (err) {
       console.error("Error al poner pago en espera:", err);
     }
@@ -236,25 +412,16 @@ export default function AdminDashboard() {
     }
 
     try {
-      // 1. Guardar deportista en la colección 'students' en Firestore
-      await setDoc(doc(db, "students", manualStudentName), {
-        name: manualStudentName,
-        age: ageNum,
-        category: category,
-        assignment: "automatic",
-        status: manualPaidCash ? "active" : "suspended",
-        dueDays: manualPaidCash ? 0 : 7,
-        parentEmail: manualParentEmail ? manualParentEmail.toLowerCase() : "",
-        parentName: manualParentName
-      });
+      const studentDocRef = doc(collection(db, "students"));
+      const newStudentId = studentDocRef.id;
+      const normalizedName = normalizeStudentName(manualStudentName);
+      const categoryId = categoryNameToId(category);
+      const normalizedParentEmail = manualParentEmail ? manualParentEmail.toLowerCase() : "";
+      let parentUid = "";
 
-      // Guardar en localStorage para compatibilidad
-      localStorage.setItem("simulatedStudentName", manualStudentName);
-      localStorage.setItem("simulatedCategory", category);
       localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
-      localStorage.setItem("simulatedParentName", manualParentName);
 
-      // 2. Registrar en Firebase Auth usando una aplicación secundaria para no desloguear al admin
+      // 1. Registrar en Firebase Auth usando una aplicación secundaria para no desloguear al admin
       if (manualParentEmail && manualParentPassword) {
         try {
           const config = auth.app.options;
@@ -263,6 +430,7 @@ export default function AdminDashboard() {
           
           const userCredential = await createUserWithEmailAndPassword(tempAuth, manualParentEmail.toLowerCase(), manualParentPassword);
           const user = userCredential.user;
+          parentUid = user.uid;
           
           // Registrar en 'users'
           await setDoc(doc(db, "users", manualParentEmail.toLowerCase()), {
@@ -271,6 +439,7 @@ export default function AdminDashboard() {
             role: "parent",
             name: manualParentName || (manualStudentName + " Acudiente"),
             phone: manualParentPhone || "",
+            studentId: newStudentId,
             studentName: manualStudentName,
             categoryName: category,
             status: manualPaidCash ? "active" : "suspended"
@@ -287,6 +456,7 @@ export default function AdminDashboard() {
               role: "parent",
               name: manualParentName || (manualStudentName + " Acudiente"),
               phone: manualParentPhone || "",
+              studentId: newStudentId,
               studentName: manualStudentName,
               categoryName: category,
               status: manualPaidCash ? "active" : "suspended"
@@ -295,16 +465,41 @@ export default function AdminDashboard() {
         }
       }
 
+      // 2. Guardar deportista en la colección 'students' con ID estable.
+      await setDoc(studentDocRef, {
+        studentId: newStudentId,
+        name: manualStudentName,
+        normalizedName,
+        age: ageNum,
+        parentName: manualParentName,
+        parentEmail: normalizedParentEmail,
+        parentUid,
+        categoryId,
+        category: category,
+        assignedCoachUid: "",
+        assignment: "automatic",
+        status: manualPaidCash ? "active" : "suspended",
+        billingStatus: manualPaidCash ? "paid" : "pending_payment",
+        healthStatus: "optimal",
+        dueDays: manualPaidCash ? 0 : 7,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
       // 3. Si pagó en efectivo/transferencia directa, registrar en Firestore pagos
       if (manualPaidCash) {
         await addDoc(collection(db, "payments"), {
+          studentId: newStudentId,
           studentName: manualStudentName,
           categoryName: category,
           amount: manualPaymentConcept === "monthly" ? 300 : 50,
           paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
           date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
           status: "approved",
-          parentEmail: manualParentEmail ? manualParentEmail.toLowerCase() : ""
+          parentEmail: normalizedParentEmail,
+          parentUid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
       }
     } catch (err) {
@@ -330,11 +525,13 @@ export default function AdminDashboard() {
 
     try {
       // Modificar en Firestore
-      const studentRef = doc(db, "students", selectedStudent.name);
+      const studentRef = doc(db, "students", selectedStudent.studentId || selectedStudent.id || selectedStudent.name);
       await updateDoc(studentRef, {
+        categoryId: categoryNameToId(newCategory),
         category: newCategory,
         assignment: "manual",
-        overrideReason: overrideReason || "Ajuste manual del cuerpo técnico"
+        overrideReason: overrideReason || "Ajuste manual del cuerpo técnico",
+        updatedAt: serverTimestamp()
       });
     } catch (err) {
       console.error("Error al aplicar override en Firestore:", err);
@@ -419,7 +616,7 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Alumnos Activos</span>
                 <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
                   <Users className="w-4 h-4 text-[#10b981]" />
-                  {students.filter(s => s.status === "active").length} / {students.length}
+                  {students.length > 0 ? `${students.filter(s => s.status === "active").length} / ${students.length}` : "Sin información"}
                 </span>
               </div>
 
@@ -428,7 +625,7 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">MRR Estimado (Mensual)</span>
                 <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
                   <DollarSign className="w-4 h-4 text-emerald-400" />
-                  {formatCurrency(students.filter(s => s.status === "active").length * 300)}
+                  Sin información
                 </span>
               </div>
 
@@ -437,7 +634,9 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Tasa de Morosidad</span>
                 <span className="text-xl font-display font-black text-amber-500 flex items-center gap-1.5 mt-0.5 animate-pulse">
                   <AlertTriangle className="w-4 h-4" />
-                  {((students.filter(s => s.status === "suspended").length / students.length) * 100).toFixed(0)}%
+                  {students.length > 0
+                    ? `${((students.filter(s => s.status === "suspended").length / students.length) * 100).toFixed(0)}%`
+                    : "Sin información"}
                 </span>
               </div>
             </div>
@@ -467,7 +666,23 @@ export default function AdminDashboard() {
                 activeTab === "schedules" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
               }`}
             >
-              Cronograma & Canchas
+              Planificación de Microciclos
+            </button>
+            <button
+              onClick={() => setActiveTab("drills")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "drills" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Biblioteca de Ejercicios
+            </button>
+            <button
+              onClick={() => setActiveTab("leaderboard")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "leaderboard" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Tabla de Honor (Leaderboard)
             </button>
             <button
               onClick={() => setActiveTab("notifications")}
@@ -478,6 +693,7 @@ export default function AdminDashboard() {
               Notificaciones Omnicanal
             </button>
           </div>
+
         </div>
 
         {/* Right Column: Tab View Content */}
@@ -661,7 +877,13 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {students.map((student) => (
+                    {students.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-xs text-slate-500">
+                          Aún no hay registros
+                        </td>
+                      </tr>
+                    ) : students.map((student) => (
                       <tr key={student.id} className="text-xs">
                         <td className="py-3.5 font-bold text-slate-300">{student.name}</td>
                         <td className="py-3.5 text-slate-400">{student.age} años</td>
@@ -811,13 +1033,13 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button
-                            onClick={() => approvePendingPayment(payment.id, payment.studentName)}
+                            onClick={() => approvePendingPayment(payment.id, payment.studentId || payment.studentName)}
                             className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
                           >
                             OK (Aprobar)
                           </button>
                           <button
-                            onClick={() => holdPendingPayment(payment.id, payment.studentName)}
+                            onClick={() => holdPendingPayment(payment.id, payment.studentId || payment.studentName)}
                             className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
                           >
                             En Espera
@@ -830,7 +1052,11 @@ export default function AdminDashboard() {
               )}
 
               <div className="space-y-3">
-                {students.map((student) => (
+                {students.length === 0 ? (
+                  <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
+                    Aún no hay registros
+                  </div>
+                ) : students.map((student) => (
                   <div key={student.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                       <div className="flex items-center gap-2">
@@ -875,9 +1101,9 @@ export default function AdminDashboard() {
                         <>
                           <button
                             onClick={() => {
-                              const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
+                              const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name) || pendingPayments[0];
                               if (firstPending) {
-                                approvePendingPayment(firstPending.id, student.name);
+                                approvePendingPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
                               } else {
                                 confirmManualPayment(student.id);
                               }
@@ -888,9 +1114,9 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             onClick={() => {
-                              const firstPending = pendingPayments.find(p => p.studentName === student.name) || pendingPayments[0];
+                              const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name) || pendingPayments[0];
                               if (firstPending) {
-                                holdPendingPayment(firstPending.id, student.name);
+                                holdPendingPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
                               } else {
                                 localStorage.setItem("simulatedStatus", "on_hold");
                                 setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: "on_hold" } : s));
@@ -918,55 +1144,337 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 3: CRONOGRAMA & CANCHAS */}
+          {/* TAB 3: PLANIFICACIÓN DE MICROCICLOS */}
           {activeTab === "schedules" && (
-            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
-              <div>
-                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Cronograma Deportivo Semanal</h2>
-                <p className="text-[10px] text-slate-500 mt-0.5">Asignación de canchas, categorías y entrenadores por día.</p>
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Planificación de Microciclos</h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Programa entrenamientos o partidos y recopila confirmaciones RSVP en tiempo real.</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
-                  <h3 className="font-display font-bold text-xs uppercase tracking-wider text-[#10b981] mb-3 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    Lunes & Miércoles
-                  </h3>
-                  <div className="space-y-3 text-xs text-slate-400">
-                    <div className="border-b border-slate-900 pb-2">
-                      <span className="font-bold text-slate-200 block">Sub-8 Iniciación</span>
-                      <span className="text-[10px] block mt-0.5">Horario: 3:30 PM - 5:00 PM | Cancha 1</span>
-                      <span className="text-[9px] text-slate-500 block">Profesor: Mario Silva</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-200 block">Sub-12 Elite</span>
-                      <span className="text-[10px] block mt-0.5">Horario: 4:00 PM - 6:00 PM | Cancha 2</span>
-                      <span className="text-[9px] text-slate-500 block">Profesor: Carlos Valderrama</span>
-                    </div>
+              {eventSaved && (
+                <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-sans">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Evento agendado y publicado en la agenda de los acudientes.</span>
+                </div>
+              )}
+
+              {/* Formulario de Nuevo Evento */}
+              <form onSubmit={handleCreateEvent} className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl space-y-4 font-sans text-left">
+                <div className="flex items-center gap-1.5 text-[#10b981] font-display font-bold text-xs uppercase tracking-wider">
+                  <Calendar className="w-4 h-4" />
+                  Agendar Nuevo Evento en Calendario
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">TÍTULO DEL EVENTO</label>
+                    <input
+                      type="text" required placeholder="Ej. Jornada 5: Club Colombia vs Millonarios"
+                      value={eventTitle} onChange={(e) => setEventTitle(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">TIPO DE EVENTO</label>
+                    <select
+                      value={eventType} onChange={(e) => setEventType(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    >
+                      <option value="training">⚽ Entrenamiento Técnico</option>
+                      <option value="match">🏆 Partido Oficial / Amistoso</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">FECHA</label>
+                    <input
+                      type="date" required value={eventDate} onChange={(e) => setEventDate(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">HORA</label>
+                    <input
+                      type="time" required value={eventTime} onChange={(e) => setEventTime(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">CATEGORÍA ASIGNADA</label>
+                    <select
+                      value={eventCategory} onChange={(e) => setEventCategory(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    >
+                      <option value="Sub-8 Iniciación">Sub-8 Iniciación</option>
+                      <option value="Sub-10 Competitivo">Sub-10 Competitivo</option>
+                      <option value="Sub-12 Elite">Sub-12 Elite</option>
+                      <option value="Sub-15 Avanzado">Sub-15 Avanzado</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">UBICACIÓN / CANCHA</label>
+                    <input
+                      type="text" placeholder="Ej. Cancha Principal, Club Colombia"
+                      value={eventLocation} onChange={(e) => setEventLocation(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    />
                   </div>
                 </div>
 
-                <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
-                  <h3 className="font-display font-bold text-xs uppercase tracking-wider text-[#10b981] mb-3 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    Martes & Jueves
-                  </h3>
-                  <div className="space-y-3 text-xs text-slate-400">
-                    <div className="border-b border-slate-900 pb-2">
-                      <span className="font-bold text-slate-200 block">Sub-10 Competitivo</span>
-                      <span className="text-[10px] block mt-0.5">Horario: 4:00 PM - 6:00 PM | Cancha 1</span>
-                      <span className="text-[9px] text-slate-500 block">Profesor: Mario Silva</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-200 block">Sub-15 Avanzado</span>
-                      <span className="text-[10px] block mt-0.5">Horario: 5:00 PM - 7:00 PM | Cancha Principal</span>
-                      <span className="text-[9px] text-slate-500 block">Profesor: Carlos Valderrama</span>
-                    </div>
-                  </div>
+                <div>
+                  <label className="text-[9px] text-slate-400 font-bold block mb-1">DESCRIPCIÓN / INSTRUCCIONES</label>
+                  <textarea
+                    rows={2} placeholder="Ej. Llegar 30 minutos antes. Traer uniforme verde completo y espinilleras."
+                    value={eventDescription} onChange={(e) => setEventDescription(e.target.value)}
+                    className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green resize-none"
+                  />
                 </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                  >
+                    Publicar Evento
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista de Eventos Agendados */}
+              <div className="space-y-3 pt-2">
+                <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black text-left">Lista de Eventos Agendados</h3>
+                {events.length === 0 ? (
+                  <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-4 rounded-xl font-sans">No hay eventos guardados.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {events.map((ev) => {
+                      const yesCount = ev.rsvps ? Object.values(ev.rsvps).filter(r => r === "confirmed").length : 0;
+                      const noCount = ev.rsvps ? Object.values(ev.rsvps).filter(r => r === "declined").length : 0;
+                      return (
+                        <div key={ev.id} className="bg-[#07090e]/60 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between gap-4 text-left">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                ev.type === "match" ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-[#10b981]"
+                              }`}>
+                                {ev.type === "match" ? "Partido" : "Entrenamiento"}
+                              </span>
+                              <span className="text-[9px] text-slate-500 font-mono">{ev.date} • {ev.time}</span>
+                            </div>
+                            <h4 className="font-bold text-slate-200 text-xs mt-1.5 truncate">{ev.title}</h4>
+                            <span className="text-[9px] text-slate-500 block truncate mt-0.5">📍 {ev.location} • {ev.category}</span>
+                            <div className="flex gap-3 text-[8px] font-bold uppercase tracking-wider mt-1.5">
+                              <span className="text-[#10b981]">Confirmados: {yesCount}</span>
+                              <span className="text-red-400">Declinados: {noCount}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteEvent(ev.id)}
+                            className="bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-slate-950 text-red-400 p-2 rounded-xl transition-all cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {/* TAB 3.5: GESTOR DE BIBLIOTECA DE EJERCICIOS */}
+          {activeTab === "drills" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Biblioteca de Ejercicios</h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Sube videos educativos sobre tácticas y conducción de balón para los deportistas.</p>
+                </div>
+              </div>
+
+              {drillSaved && (
+                <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-sans">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Ejercicio publicado exitosamente en la biblioteca multimedia.</span>
+                </div>
+              )}
+
+              {/* Formulario de Carga */}
+              <form onSubmit={handleCreateDrill} className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl space-y-4 font-sans text-left">
+                <div className="flex items-center gap-1.5 text-[#10b981] font-display font-bold text-xs uppercase tracking-wider">
+                  <Video className="w-4 h-4" />
+                  Publicar Nuevo Video de Entrenamiento
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">TÍTULO DEL EJERCICIO</label>
+                    <input
+                      type="text" required placeholder="Ej. Control de Balón y Pase Rápido"
+                      value={drillTitle} onChange={(e) => setDrillTitle(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">CATEGORÍA DEL EJERCICIO</label>
+                    <select
+                      value={drillCategory} onChange={(e) => setDrillCategory(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    >
+                      <option value="técnica">⚽ Técnica Individual</option>
+                      <option value="físico">🏃 Físico y Coordinación</option>
+                      <option value="táctica">🧠 Táctica de Juego</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">URL DEL VIDEO (MP4 EMBEBIBLE)</label>
+                    <input
+                      type="url" required placeholder="Ej. https://www.w3schools.com/html/mov_bbb.mp4"
+                      value={drillVideoUrl} onChange={(e) => setDrillVideoUrl(e.target.value)}
+                      className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-slate-400 font-bold block mb-1">DESCRIPCIÓN DEL TRABAJO / REPETICIONES</label>
+                  <textarea
+                    rows={2} placeholder="Explica detalladamente la postura técnica y cuántas repeticiones debe hacer el niño."
+                    value={drillDescription} onChange={(e) => setDrillDescription(e.target.value)}
+                    className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                  >
+                    Publicar Video
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista de Videos en la Biblioteca */}
+              <div className="space-y-3 pt-2">
+                <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black text-left">Videos de la Biblioteca</h3>
+                {drills.length === 0 ? (
+                  <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-4 rounded-xl font-sans">No hay videos en la biblioteca.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {drills.map((drill) => (
+                      <div key={drill.id} className="bg-[#07090e]/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between gap-3 text-left">
+                        <div>
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-[8px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-400 uppercase tracking-wider">{drill.category}</span>
+                            <button
+                              onClick={() => handleDeleteDrill(drill.id)}
+                              className="text-red-500 hover:text-red-400 transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <h4 className="font-bold text-slate-200 text-xs mt-1.5">{drill.title}</h4>
+                          <p className="text-[10px] text-slate-450 mt-1 line-clamp-2 leading-relaxed font-sans">{drill.description}</p>
+                        </div>
+                        <video src={drill.videoUrl} className="w-full rounded-lg bg-slate-950 aspect-video object-cover" controls />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3.6: TABLA DE HONOR (GAMIFICACIÓN DEL LEADERBOARD) */}
+          {activeTab === "leaderboard" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">🏆 Tabla de Honor (Leaderboard)</h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Gamificación mensual de deportistas basada en asistencia (40%) y promedio de calificación técnica (60%).</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse font-sans">
+                  <thead>
+                    <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="pb-3 text-center w-12">Rango</th>
+                      <th className="pb-3">Deportista</th>
+                      <th className="pb-3">Categoría</th>
+                      <th className="pb-3 text-center">Ficha Técnica (Promedio)</th>
+                      <th className="pb-3 text-center">Asistencia</th>
+                      <th className="pb-3 text-right pr-4">Puntaje Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {getLeaderboard().length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                          Aún no hay registros
+                        </td>
+                      </tr>
+                    ) : getLeaderboard().map((item, index) => {
+                      const isTop3 = index < 3;
+                      const placeColors = [
+                        "text-amber-400 bg-amber-500/10 border border-amber-500/20", // Oro
+                        "text-slate-300 bg-slate-500/10 border border-slate-500/20", // Plata
+                        "text-amber-600 bg-amber-700/10 border border-amber-800/20", // Bronce
+                      ];
+                      return (
+                        <tr key={item.id} className="text-xs">
+                          <td className="py-3 text-center font-black">
+                            {isTop3 ? (
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-[10px] ${placeColors[index]}`}>
+                                {index === 0 && "🥇"}
+                                {index === 1 && "🥈"}
+                                {index === 2 && "🥉"}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 font-mono">#{index + 1}</span>
+                            )}
+                          </td>
+                          <td className="py-3 font-bold text-slate-200">{item.name}</td>
+                          <td className="py-3 text-slate-400">
+                            <span className="bg-[#07090e] px-2 py-0.5 rounded border border-slate-850 text-[8px] uppercase tracking-wider font-mono">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="py-3 text-center font-mono font-bold text-slate-350">
+                            {item.avgScore !== null ? `${item.avgScore}/10` : "Sin información"}
+                          </td>
+                          <td className="py-3 text-center font-mono font-bold text-[#10b981]">
+                            {item.attendanceRate !== null ? `${item.attendanceRate}%` : "Sin información"}
+                          </td>
+                          <td className="py-3 text-right font-mono font-black text-[#10b981] pr-4">
+                            {item.overallPoints !== null ? (
+                              <>
+                                <span className="text-[13px]">{item.overallPoints}</span> pts
+                              </>
+                            ) : (
+                              "Sin información"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
 
           {/* TAB 4: NOTIFICACIONES OMNICANAL */}
           {activeTab === "notifications" && (

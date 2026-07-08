@@ -8,11 +8,15 @@ import { billingService } from "@/lib/services/billingService";
  */
 export async function GET(request) {
   try {
-    // Protección simple mediante token secreto en cabecera o query param
-    const { searchParams } = new URL(request.url);
-    const cronToken = searchParams.get("token");
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      return NextResponse.json({ error: "CRON_SECRET no está configurado" }, { status: 500 });
+    }
     
-    if (process.env.CRON_SECRET && cronToken !== process.env.CRON_SECRET) {
+    const authHeader = request.headers.get("authorization") || "";
+    const expectedHeader = `Bearer ${cronSecret}`;
+
+    if (authHeader !== expectedHeader) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

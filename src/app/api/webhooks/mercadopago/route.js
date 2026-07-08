@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { billingService } from "@/lib/services/billingService";
-
 /**
  * Recibe notificaciones IPN / Webhooks de Mercado Pago en tiempo real.
  * Procesa la aprobación de suscripciones recurrentes de la Escuela de Fútbol.
@@ -15,24 +13,11 @@ export async function POST(request) {
 
     // Verificar si es una notificación de pago
     if (action === "payment.created" || action === "payment" || !action) {
-      
-      // En producción, harías una llamada a la API de Mercado Pago para verificar:
-      // fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, { headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` } })
-      
-      const payload = {
-        paymentId: paymentId,
-        // Usar preferencia provista o mockear una para compatibilidad
-        preferenceId: body.preference_id || body.data?.preference_id || "pref_colombia_mock",
-        status: "approved"
-      };
-
-      const result = await billingService.processPaymentWebhook(payload);
-      
       return NextResponse.json({ 
-        success: true, 
-        message: "Webhook procesado exitosamente",
-        data: result 
-      });
+        success: false,
+        paymentId,
+        message: "Pago recibido pero no aprobado: falta validación real con Mercado Pago"
+      }, { status: 202 });
     }
 
     return NextResponse.json({ 

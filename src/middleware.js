@@ -1,39 +1,56 @@
 import { NextResponse } from "next/server";
+import { getSessionCookieName } from "@/lib/authSession";
 
 /**
  * Middleware de Next.js para interceptar peticiones del lado del servidor.
  * Protege y delimita los accesos de roles:
- * - /dashboard/admin -> Únicamente Profe Luis López
+ * - /dashboard/admin -> Únicamente administradores con sesión HttpOnly firmada
  * - /dashboard/coach -> Únicamente Entrenadores
  * - /dashboard/parent -> Únicamente Padres / Deportistas
+ *
+ * Firebase Admin SDK no es compatible con Edge Middleware. Por eso el
+ * middleware delega la verificación criptográfica y la revalidación de rol a
+ * /api/auth/session, que corre en runtime Node.js con Firebase Admin SDK.
  */
 export async function middleware(request) {
   const url = request.nextUrl.clone();
-  const userRole = request.cookies.get("user-role")?.value;
-  const userEmail = request.cookies.get("user-email")?.value;
+  const cookieName = getSessionCookieName();
+  const sessionCookie = request.cookies.get(cookieName)?.value;
 
-  const ALLOWED_ADMIN_EMAIL = "luis.lopez@clubcolombia.com";
+  if (!sessionCookie) {
+    return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
+  }
+
+  const sessionResponse = await fetch(new URL("/api/auth/session", request.url), {
+    headers: {
+      cookie: `${cookieName}=${sessionCookie}`
+    },
+    cache: "no-store"
+  });
+
+  if (!sessionResponse.ok) {
+    return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
+  }
+
+  const session = await sessionResponse.json();
 
   // 1. Proteger Panel Administrativo
   if (url.pathname.startsWith("/dashboard/admin")) {
-    if (userRole !== "admin" || userEmail !== ALLOWED_ADMIN_EMAIL) {
-      console.warn(`[Seguridad] Intento de acceso denegado a admin: Correo: ${userEmail}, Rol: ${userRole}`);
+    if (session.role !== "admin") {
       return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
   }
 
   // 2. Proteger Panel del Entrenador
   if (url.pathname.startsWith("/dashboard/coach")) {
-    if (userRole !== "coach") {
-      console.warn(`[Seguridad] Intento de acceso denegado a coach: Correo: ${userEmail}, Rol: ${userRole}`);
+    if (session.role !== "coach") {
       return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
   }
 
   // 3. Proteger Portal del Acudiente
   if (url.pathname.startsWith("/dashboard/parent")) {
-    if (userRole !== "parent") {
-      console.warn(`[Seguridad] Intento de acceso denegado a parent: Correo: ${userEmail}, Rol: ${userRole}`);
+    if (session.role !== "parent") {
       return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
   }

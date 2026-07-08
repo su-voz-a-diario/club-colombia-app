@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { collection, doc, onSnapshot, setDoc, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export default function CoachDashboard() {
   const [students, setStudents] = useState([]);
@@ -12,7 +12,7 @@ export default function CoachDashboard() {
   const [activeTab, setActiveTab] = useState("attendance"); // 'attendance' | 'evaluation'
   const [attendanceSaved, setAttendanceSaved] = useState(false);
 
-  // Estados para evaluación técnica
+  // Estados para evaluación técnica y salud
   const [selectedStudent, setSelectedStudent] = useState("");
   const [speed, setSpeed] = useState(7);
   const [passing, setPassing] = useState(8);
@@ -20,37 +20,83 @@ export default function CoachDashboard() {
   const [shooting, setShooting] = useState(7);
   const [physical, setPhysical] = useState(8);
   const [discipline, setDiscipline] = useState(9);
+  const [healthStatus, setHealthStatus] = useState("optimal"); // 'optimal' | 'fatigue' | 'injured'
   const [tacticalNotes, setTacticalNotes] = useState("");
   const [evaluationSaved, setEvaluationSaved] = useState(false);
+  const [nextEvent, setNextEvent] = useState(null);
 
   useEffect(() => {
-    // Escuchar alumnos de la categoría "Sub-10 Competitivo" en tiempo real
-    const q = query(collection(db, "students"), where("category", "==", "Sub-10 Competitivo"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Escuchar alumnos registrados en tiempo real
+    const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
       const studs = [];
       snapshot.forEach((doc) => {
-        studs.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        studs.push({ id: doc.id, studentId: data.studentId || doc.id, ...data });
       });
       setStudents(studs);
       
-      // Inicializar estado de asistencia
-      setAttendance(studs.map(s => ({
-        id: s.id,
-        name: s.name,
-        status: null
-      })));
+      // Inicializar estado de asistencia si aún no se ha modificado manualmente
+      setAttendance(prev => {
+        return studs.map(s => {
+          const existing = prev.find(a => a.id === s.id);
+          return {
+            id: s.id,
+            studentId: s.studentId || s.id,
+            name: s.name,
+            status: existing ? existing.status : null,
+            healthStatus: s.healthStatus || "optimal"
+          };
+        });
+      });
     });
 
     return () => unsubscribe();
   }, []);
 
+  // Escuchar el siguiente evento del microciclo para contar RSVPs
+  useEffect(() => {
+    const unsubscribeEvents = onSnapshot(collection(db, "events"), (snapshot) => {
+      const evs = [];
+      snapshot.forEach(doc => {
+        evs.push({ id: doc.id, ...doc.data() });
+      });
+      const nowStr = new Date().toISOString().split("T")[0];
+      const upcoming = evs
+        .filter(e => e.date >= nowStr)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0];
+      setNextEvent(upcoming || null);
+    });
+    return () => unsubscribeEvents();
+  }, []);
+
+  // Pre-cargar estado de salud cuando se selecciona un alumno
+  useEffect(() => {
+    if (selectedStudent) {
+      const student = students.find(s => (s.studentId || s.id) === selectedStudent);
+      if (student && student.healthStatus) {
+        setHealthStatus(student.healthStatus);
+      } else {
+        setHealthStatus("optimal");
+      }
+    }
+  }, [selectedStudent, students]);
+
+  // Manejar el click de asistencia con alertas de salud para lesionados
+  const handleAttendanceClick = (athlete, newStatus) => {
+    if (newStatus === "P" && athlete.healthStatus === "injured") {
+      const confirmBypass = window.confirm(`ALERTA MÉDICA: ${athlete.name} está registrado como LESIONADO. ¿Deseas autorizar su participación bajo tu supervisión en esta sesión?`);
+      if (!confirmBypass) return;
+    }
+    setAttendance(prev => prev.map(a => a.id === athlete.id ? { ...a, status: newStatus } : a));
+  };
+
   // Guardar reporte de asistencia en Firestore
   const saveAttendance = async () => {
     try {
       const dateStr = new Date().toLocaleDateString("es-CO");
-      await setDoc(doc(db, "attendance", `Sub10-${dateStr.replace(/\//g, "-")}`), {
+      await setDoc(doc(db, "attendance", `attendance-${dateStr.replace(/\//g, "-")}`), {
         date: dateStr,
-        category: "Sub-10 Competitivo",
+        category: "Sin información disponible",
         records: attendance.map(a => ({ name: a.name, status: a.status || "P" })),
         timestamp: new Date().toISOString()
       });
@@ -61,28 +107,35 @@ export default function CoachDashboard() {
     }
   };
 
-  // Guardar reporte de evaluación técnica en Firestore y local
+  // Guardar reporte de evaluación técnica en Firestore como histórico
   const saveEvaluation = async (e) => {
     e.preventDefault();
     if (!selectedStudent) return;
 
     try {
-      const targetName = selectedStudent;
+      const selectedStudentDoc = students.find(s => (s.studentId || s.id) === selectedStudent);
+      if (!selectedStudentDoc) return;
+      const targetStudentId = selectedStudentDoc.studentId || selectedStudentDoc.id;
+      const targetName = selectedStudentDoc.name;
       const metricsObj = { speed, passing, dribbling, shooting, physical, discipline };
       
-      await setDoc(doc(db, "evaluations", targetName), {
+      // Guardar evaluación histórica en evaluations
+      await addDoc(collection(db, "evaluations"), {
+        studentId: targetStudentId,
         studentName: targetName,
         metrics: metricsObj,
         tacticalNotes: tacticalNotes,
         date: new Date().toLocaleDateString("es-CO"),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
-      // Guardar en localStorage para mantener compatibilidad si es Juan Andrés García
-      if (targetName === "Juan Andrés García") {
-        localStorage.setItem("simulatedMetrics", JSON.stringify(metricsObj));
-        localStorage.setItem("simulatedNotes", tacticalNotes);
-      }
+      // Actualizar el estado de salud del estudiante en su ficha de deportista
+      await updateDoc(doc(db, "students", targetStudentId), {
+        healthStatus: healthStatus,
+        updatedAt: serverTimestamp()
+      });
 
       setEvaluationSaved(true);
       setTimeout(() => {
@@ -102,8 +155,8 @@ export default function CoachDashboard() {
       <header className="glass-panel border-b border-slate-900 px-5 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <div>
-            <h1 className="font-display font-black text-xs uppercase text-slate-200">Prof. Mario Silva</h1>
-            <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-wider">Director Técnico Sub-10</p>
+            <h1 className="font-display font-black text-xs uppercase text-slate-200">Portal del Entrenador</h1>
+            <p className="text-[9px] text-[#10b981] font-bold uppercase tracking-wider">Sin información disponible</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -130,7 +183,7 @@ export default function CoachDashboard() {
           Portal del Entrenador
         </h2>
         <p className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">
-          Club Colombia • Categoría Sub-10
+          Club Colombia • Sin información disponible
         </p>
       </div>
 
@@ -169,6 +222,23 @@ export default function CoachDashboard() {
               </div>
             </div>
 
+            {/* Siguiente Evento y RSVP */}
+            {nextEvent && (
+              <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between text-xs">
+                <div className="min-w-0 flex-1 pr-2">
+                  <span className="text-[8px] text-[#10b981] font-bold uppercase tracking-wider block">Próximo Evento (RSVP)</span>
+                  <span className="font-bold text-slate-200 block truncate">{nextEvent.title}</span>
+                  <span className="text-[8px] text-slate-500 font-mono mt-0.5 block">{nextEvent.date} • {nextEvent.time}</span>
+                </div>
+                <div className="bg-[#10b981]/15 border border-[#10b981]/25 text-[#10b981] font-bold px-3 py-1.5 rounded-xl text-center shrink-0">
+                  <span className="block text-[13px] font-black leading-none">
+                    {nextEvent.rsvps ? Object.values(nextEvent.rsvps).filter(v => v === "confirmed").length : 0}
+                  </span>
+                  <span className="text-[6px] uppercase tracking-wider block mt-0.5 leading-none">Confirmados</span>
+                </div>
+              </div>
+            )}
+
             {attendanceSaved && (
               <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3 rounded-xl text-[10px] flex items-center gap-1.5 animate-fade-in">
                 <Check className="w-4 h-4" />
@@ -177,14 +247,38 @@ export default function CoachDashboard() {
             )}
 
             <div className="divide-y divide-slate-800/60">
-              {attendance.map((athlete) => (
+              {attendance.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-500 font-sans">
+                  Aún no hay registros
+                </div>
+              ) : attendance.map((athlete) => (
                 <div key={athlete.id} className="py-3 flex items-center justify-between gap-4">
-                  <span className="text-xs font-bold text-slate-300">{athlete.name}</span>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs font-bold text-slate-300 truncate">{athlete.name}</span>
+                    <div className="flex items-center gap-1">
+                      {athlete.healthStatus === "injured" && (
+                        <span className="text-[7px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
+                          <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" /> Lesionado
+                        </span>
+                      )}
+                      {athlete.healthStatus === "fatigue" && (
+                        <span className="text-[7px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
+                          <span className="w-1 h-1 bg-amber-500 rounded-full" /> Fatiga
+                        </span>
+                      )}
+                      {athlete.healthStatus === "optimal" && (
+                        <span className="text-[7px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
+                          <span className="w-1 h-1 bg-emerald-500 rounded-full" /> Óptimo
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   
                   {/* Selector Táctil */}
-                  <div className="flex items-center gap-1 bg-[#07090e] p-1 rounded-lg border border-slate-900">
+                  <div className="flex items-center gap-1 bg-[#07090e] p-1 rounded-lg border border-slate-900 shrink-0">
                     <button
-                      onClick={() => setAttendance(prev => prev.map(a => a.id === athlete.id ? { ...a, status: "P" } : a))}
+                      type="button"
+                      onClick={() => handleAttendanceClick(athlete, "P")}
                       className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
                         athlete.status === "P" ? "bg-emerald-500 text-slate-950 shadow" : "text-emerald-500 hover:bg-emerald-500/10"
                       }`}
@@ -192,7 +286,8 @@ export default function CoachDashboard() {
                       P
                     </button>
                     <button
-                      onClick={() => setAttendance(prev => prev.map(a => a.id === athlete.id ? { ...a, status: "A" } : a))}
+                      type="button"
+                      onClick={() => handleAttendanceClick(athlete, "A")}
                       className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
                         athlete.status === "A" ? "bg-red-500 text-slate-950 shadow" : "text-red-500 hover:bg-red-500/10"
                       }`}
@@ -200,7 +295,8 @@ export default function CoachDashboard() {
                       A
                     </button>
                     <button
-                      onClick={() => setAttendance(prev => prev.map(a => a.id === athlete.id ? { ...a, status: "J" } : a))}
+                      type="button"
+                      onClick={() => handleAttendanceClick(athlete, "J")}
                       className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
                         athlete.status === "J" ? "bg-amber-500 text-slate-950 shadow" : "text-amber-500 hover:bg-amber-500/10"
                       }`}
@@ -245,11 +341,30 @@ export default function CoachDashboard() {
                 className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
               >
                 <option value="">-- Seleccionar Atleta --</option>
+                {students.length === 0 && (
+                  <option value="" disabled>Aún no hay registros</option>
+                )}
                 {students.map((s) => (
-                  <option key={s.id} value={s.name}>{s.name}</option>
+                  <option key={s.id} value={s.studentId || s.id}>{s.name}</option>
                 ))}
               </select>
             </div>
+
+            {/* Selector de Estado Físico */}
+            {selectedStudent && (
+              <div className="animate-fade-in">
+                <label className="text-[8px] text-slate-400 font-bold block mb-1">ESTADO FÍSICO / SALUD</label>
+                <select
+                  value={healthStatus}
+                  onChange={(e) => setHealthStatus(e.target.value)}
+                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-250 focus:outline-none focus:border-brand-green"
+                >
+                  <option value="optimal">🟢 Óptimo (Listo para entrenar)</option>
+                  <option value="fatigue">🟡 Fatiga / Carga moderada (Precaución)</option>
+                  <option value="injured">🔴 Lesionado (Protocolo de descanso activo)</option>
+                </select>
+              </div>
+            )}
 
             {/* Sliders de Habilidades */}
             <div className="space-y-3 pt-2">

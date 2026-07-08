@@ -6,9 +6,10 @@ import { ShieldCheck, UserCheck, Users, Dumbbell, ArrowRight, UserPlus, LogIn, C
 import Link from "next/link";
 import PaymentSimulator from "@/components/PaymentSimulator";
 import QRGenerator from "@/components/QRGenerator";
-import { auth, db, seedFirebaseDatabase } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Login() {
   const router = useRouter();
@@ -26,20 +27,16 @@ export default function Login() {
   const [parentEmail, setParentEmail] = useState("");
   const [parentPassword, setParentPassword] = useState("");
   const [studentName, setStudentName] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [parentUid, setParentUid] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [studentCategory, setStudentCategory] = useState(null);
   const [registerError, setRegisterError] = useState("");
 
-  // Inicialización de usuarios de prueba en Firebase y borrado de cookies (Logout)
+  // Limpiar cookies de sesión para asegurar que al estar en /login el usuario está deslogueado
   React.useEffect(() => {
     if (typeof window !== "undefined") {
-      // Limpiar cookies de sesión para asegurar que al estar en /login el usuario está deslogueado
-      document.cookie = "user-role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-      document.cookie = "user-email=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-      document.cookie = "user-status=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-
-      // Sembrar base de datos si no existe
-      seedFirebaseDatabase();
+      fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     }
   }, []);
 
@@ -92,6 +89,10 @@ export default function Login() {
         // Registrar en Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, parentEmail.toLowerCase(), parentPassword);
         const user = userCredential.user;
+        const studentDocRef = doc(collection(db, "students"));
+        const newStudentId = studentDocRef.id;
+        const normalizedName = normalizeStudentName(studentName);
+        const categoryId = categoryNameToId(studentCategory.name);
 
         // Registrar perfil en la colección 'users'
         await setDoc(doc(db, "users", parentEmail.toLowerCase()), {
@@ -100,6 +101,7 @@ export default function Login() {
           role: "parent",
           name: parentName,
           phone: parentPhone,
+          studentId: newStudentId,
           studentName: studentName,
           categoryName: studentCategory.name,
           status: "suspended"
@@ -108,25 +110,38 @@ export default function Login() {
         // Registrar deportista en la colección 'students'
         const birthYear = new Date(birthDate).getFullYear();
         const ageNum = 2026 - birthYear;
-        await setDoc(doc(db, "students", studentName), {
+        await setDoc(studentDocRef, {
+          studentId: newStudentId,
           name: studentName,
+          normalizedName,
           age: ageNum || 9,
+          parentName,
+          parentEmail: parentEmail.toLowerCase(),
+          parentUid: user.uid,
+          categoryId,
           category: studentCategory.name,
+          assignedCoachUid: "",
           assignment: "automatic",
           status: "suspended",
+          billingStatus: "pending_payment",
+          healthStatus: "optimal",
           dueDays: 7,
-          parentEmail: parentEmail.toLowerCase(),
-          parentName: parentName
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
+        setStudentId(newStudentId);
+        setParentUid(user.uid);
         
-        // Guardar sesión en cookies
-        document.cookie = `user-role=parent; path=/; max-age=86400`;
-        document.cookie = `user-email=${parentEmail.toLowerCase()}; path=/; max-age=86400`;
-        document.cookie = `user-status=suspended; path=/; max-age=86400`;
+        const idToken = await user.getIdToken();
+        const sessionResponse = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken })
+        });
+        if (!sessionResponse.ok) {
+          throw new Error("No se pudo crear la sesión segura.");
+        }
         
-        // Guardar estados del alumno
-        localStorage.setItem("simulatedStudentName", studentName);
-        localStorage.setItem("simulatedCategory", studentCategory.name);
         localStorage.setItem("simulatedStatus", "suspended");
         
         setRegisterStep(2);
@@ -148,28 +163,35 @@ export default function Login() {
       // 1. Guardar solicitud en pendingPayments en Firestore
       await addDoc(collection(db, "payments"), {
         studentName: studentName,
+        studentId: studentId || "",
+        parentUid: parentUid || "",
+        categoryId: categoryNameToId(studentCategory.name),
         categoryName: studentCategory.name,
         amount: amount,
         paymentType: paymentLabel,
         date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
         status: "pending",
-        parentEmail: parentEmail.toLowerCase()
+        parentEmail: parentEmail.toLowerCase(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
 
-      // 2. Cambiar su estado a 'pending_validation' tanto en Firestore como en cookies y localStorage
+      // 2. Cambiar su estado a 'pending_validation' tanto en Firestore como en localStorage
       const userRef = doc(db, "users", parentEmail.toLowerCase());
       await updateDoc(userRef, {
         status: "pending_validation"
       });
 
-      const studentRef = doc(db, "students", studentName);
+      // Compatibilidad legacy: durante esta fase, solo usar nombre si todavía no existe studentId.
+      const studentRef = doc(db, "students", studentId || studentName);
       await updateDoc(studentRef, {
         status: "pending_validation",
-        dueDays: 0
+        billingStatus: "pending_validation",
+        dueDays: 0,
+        updatedAt: serverTimestamp()
       });
 
       localStorage.setItem("simulatedStatus", "pending_validation");
-      document.cookie = `user-status=pending_validation; path=/; max-age=86400`;
 
       setRegisterStep(3);
     } catch (err) {
@@ -198,15 +220,19 @@ export default function Login() {
 
       const user = userDocSnap.data();
 
-      // Escribir cookies de sesión
-      document.cookie = `user-role=${user.role}; path=/; max-age=86400`;
-      document.cookie = `user-email=${user.email}; path=/; max-age=86400`;
-      document.cookie = `user-status=${user.status || "active"}; path=/; max-age=86400`;
+      const idToken = await authUser.getIdToken();
+      const sessionResponse = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken })
+      });
+      if (!sessionResponse.ok) {
+        setLoginError("No se pudo crear una sesión segura. Intenta nuevamente.");
+        return;
+      }
 
       // Sincronizar localStorage si es padre
       if (user.role === "parent") {
-        localStorage.setItem("simulatedStudentName", user.studentName || "Juan Andrés García");
-        localStorage.setItem("simulatedCategory", user.categoryName || "Sub-10 Competitivo");
         localStorage.setItem("simulatedStatus", user.status || "suspended");
       }
 
@@ -330,12 +356,6 @@ export default function Login() {
               Iniciar Sesión
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
-
-            <div className="pt-2 text-center text-[10px] text-slate-500 space-y-1">
-              <p>Demo Admin: <span className="text-slate-300 font-semibold">luis.lopez@clubcolombia.com</span> / <span className="text-slate-300">luis123</span></p>
-              <p>Demo Entrenador: <span className="text-slate-300 font-semibold">mario.silva@clubcolombia.com</span> / <span className="text-slate-300">mario123</span></p>
-              <p>Demo Acudiente: <span className="text-slate-300 font-semibold">ricardo.garcia@gmail.com</span> / <span className="text-slate-300">ricardo123</span></p>
-            </div>
           </form>
         )}
 
@@ -361,7 +381,7 @@ export default function Login() {
                     <input
                       type="text"
                       required
-                      placeholder="Ej. Ricardo García"
+                      placeholder="Nombre completo"
                       value={parentName}
                       onChange={(e) => setParentName(e.target.value)}
                       className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
@@ -413,7 +433,7 @@ export default function Login() {
                     <input
                       type="text"
                       required
-                      placeholder="Ej. Juan Andrés García"
+                      placeholder="Nombre completo del atleta"
                       value={studentName}
                       onChange={(e) => setStudentName(e.target.value)}
                       className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green font-semibold"
