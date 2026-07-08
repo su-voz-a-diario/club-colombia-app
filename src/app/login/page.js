@@ -8,7 +8,8 @@ import PaymentSimulator from "@/components/PaymentSimulator";
 import QRGenerator from "@/components/QRGenerator";
 import { auth, db } from "@/lib/firebase";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { normalizeAndValidatePhone } from "@/lib/phone";
+import { RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Login() {
@@ -16,16 +17,20 @@ export default function Login() {
   const [activeTab, setActiveTab] = useState("login"); // 'login' | 'register'
   
   // Estados de Autenticación
+  const [loginUserType, setLoginUserType] = useState("parent");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [smsCode, setSmsCode] = useState("");
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [loginError, setLoginError] = useState("");
 
   // Estados para simulación de Inscripción
   const [registerStep, setRegisterStep] = useState(1); // 1: Datos, 2: Horarios/Pago, 3: Credencial QR
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
-  const [parentEmail, setParentEmail] = useState("");
-  const [parentPassword, setParentPassword] = useState("");
+  const [parentEmail] = useState("");
   const [studentName, setStudentName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [parentUid, setParentUid] = useState("");
@@ -39,6 +44,31 @@ export default function Login() {
       fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
     }
   }, []);
+
+  const createSessionFromAuthUser = async (authUser) => {
+    const idToken = await authUser.getIdToken();
+    const sessionResponse = await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken })
+    });
+
+    if (!sessionResponse.ok) {
+      throw new Error("No se pudo crear una sesión segura.");
+    }
+
+    return sessionResponse.json();
+  };
+
+  const getRecaptchaVerifier = () => {
+    if (typeof window === "undefined") return null;
+    if (!window.ccRecaptchaVerifier) {
+      window.ccRecaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible"
+      });
+    }
+    return window.ccRecaptchaVerifier;
+  };
 
   // Leer query params al cargar
   React.useEffect(() => {
@@ -78,34 +108,11 @@ export default function Login() {
     
     if (registerStep === 1 && studentCategory) {
       try {
-        const userDocRef = doc(db, "users", parentEmail.toLowerCase());
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-          setRegisterError("El correo electrónico ya está registrado en la escuela. Por favor inicia sesión.");
-          return;
-        }
-
-        // Registrar en Firebase Auth
-        const userCredential = await createUserWithEmailAndPassword(auth, parentEmail.toLowerCase(), parentPassword);
-        const user = userCredential.user;
+        const normalizedParentPhone = normalizeAndValidatePhone(parentPhone);
         const studentDocRef = doc(collection(db, "students"));
         const newStudentId = studentDocRef.id;
         const normalizedName = normalizeStudentName(studentName);
         const categoryId = categoryNameToId(studentCategory.name);
-
-        // Registrar perfil en la colección 'users'
-        await setDoc(doc(db, "users", parentEmail.toLowerCase()), {
-          uid: user.uid,
-          email: parentEmail.toLowerCase(),
-          role: "parent",
-          name: parentName,
-          phone: parentPhone,
-          studentId: newStudentId,
-          studentName: studentName,
-          categoryName: studentCategory.name,
-          status: "suspended"
-        });
 
         // Registrar deportista en la colección 'students'
         const birthYear = new Date(birthDate).getFullYear();
@@ -116,8 +123,9 @@ export default function Login() {
           normalizedName,
           age: ageNum || 9,
           parentName,
-          parentEmail: parentEmail.toLowerCase(),
-          parentUid: user.uid,
+          parentPhone: normalizedParentPhone,
+          parentEmail: "",
+          parentUid: "",
           categoryId,
           category: studentCategory.name,
           assignedCoachUid: "",
@@ -130,30 +138,14 @@ export default function Login() {
           updatedAt: serverTimestamp()
         });
         setStudentId(newStudentId);
-        setParentUid(user.uid);
-        
-        const idToken = await user.getIdToken();
-        const sessionResponse = await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken })
-        });
-        if (!sessionResponse.ok) {
-          throw new Error("No se pudo crear la sesión segura.");
-        }
+        setParentUid("");
         
         localStorage.setItem("simulatedStatus", "suspended");
         
         setRegisterStep(2);
       } catch (err) {
         console.error("Error en registro:", err);
-        if (err.code === "auth/email-already-in-use") {
-          setRegisterError("El correo electrónico ya está en uso. Por favor inicia sesión.");
-        } else if (err.code === "auth/weak-password") {
-          setRegisterError("La contraseña debe tener al menos 6 caracteres.");
-        } else {
-          setRegisterError("Ocurrió un error al registrar al usuario: " + err.message);
-        }
+        setRegisterError("Ocurrió un error al registrar al alumno: " + err.message);
       }
     }
   };
@@ -176,13 +168,7 @@ export default function Login() {
         updatedAt: serverTimestamp()
       });
 
-      // 2. Cambiar su estado a 'pending_validation' tanto en Firestore como en localStorage
-      const userRef = doc(db, "users", parentEmail.toLowerCase());
-      await updateDoc(userRef, {
-        status: "pending_validation"
-      });
-
-      // Compatibilidad legacy: durante esta fase, solo usar nombre si todavía no existe studentId.
+      // 2. Cambiar su estado a 'pending_validation' tanto en Firestore como en localStorage.
       const studentRef = doc(db, "students", studentId || studentName);
       await updateDoc(studentRef, {
         status: "pending_validation",
@@ -205,13 +191,36 @@ export default function Login() {
     setLoginError("");
 
     try {
+      if (loginUserType === "parent") {
+        const normalizedPhone = normalizeAndValidatePhone(loginPhone);
+        if (!phoneCodeSent) {
+          const verifier = getRecaptchaVerifier();
+          const result = await signInWithPhoneNumber(auth, normalizedPhone, verifier);
+          setConfirmationResult(result);
+          setPhoneCodeSent(true);
+          return;
+        }
+
+        if (!confirmationResult) {
+          setLoginError("Primero solicita el código SMS.");
+          return;
+        }
+
+        const userCredential = await confirmationResult.confirm(smsCode);
+        await createSessionFromAuthUser(userCredential.user);
+        router.push("/dashboard/parent");
+        return;
+      }
+
       // 1. Iniciar sesión en Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail.toLowerCase(), loginPassword);
       const authUser = userCredential.user;
 
       // 2. Leer perfil del usuario de Firestore
-      const userDocRef = doc(db, "users", loginEmail.toLowerCase());
-      const userDocSnap = await getDoc(userDocRef);
+      let userDocSnap = await getDoc(doc(db, "users", authUser.uid));
+      if (!userDocSnap.exists()) {
+        userDocSnap = await getDoc(doc(db, "users", loginEmail.toLowerCase()));
+      }
 
       if (!userDocSnap.exists()) {
         setLoginError("No se encontró el perfil de usuario en la base de datos.");
@@ -219,22 +228,12 @@ export default function Login() {
       }
 
       const user = userDocSnap.data();
-
-      const idToken = await authUser.getIdToken();
-      const sessionResponse = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken })
-      });
-      if (!sessionResponse.ok) {
-        setLoginError("No se pudo crear una sesión segura. Intenta nuevamente.");
+      if (user.role !== loginUserType || !["admin", "coach"].includes(user.role)) {
+        setLoginError("El tipo de usuario seleccionado no corresponde a esta cuenta.");
         return;
       }
 
-      // Sincronizar localStorage si es padre
-      if (user.role === "parent") {
-        localStorage.setItem("simulatedStatus", user.status || "suspended");
-      }
+      await createSessionFromAuthUser(authUser);
 
       // Redirigir
       if (user.role === "admin") {
@@ -246,7 +245,11 @@ export default function Login() {
       }
     } catch (err) {
       console.error("Error en login:", err);
-      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+      if (err.code === "auth/invalid-phone-number") {
+        setLoginError("El teléfono no es válido. Usa formato internacional, por ejemplo +573001234567.");
+      } else if (err.code === "auth/invalid-verification-code") {
+        setLoginError("El código SMS no es válido.");
+      } else if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
         setLoginError("Correo electrónico o contraseña incorrectos.");
       } else {
         setLoginError("Error de conexión con el servidor: " + err.message);
@@ -314,7 +317,7 @@ export default function Login() {
           <form onSubmit={handleLoginSubmit} className="bg-[#0e121e]/80 border border-slate-900 p-6 rounded-3xl shadow-xl space-y-5 font-sans">
             <div className="text-center">
               <h2 className="font-display font-bold text-sm text-slate-200 uppercase tracking-wider">Ingreso de Usuarios</h2>
-              <p className="text-[11px] text-slate-500 mt-1">Escribe tu correo y contraseña asignada para acceder al portal.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Selecciona tu tipo de usuario para acceder al portal.</p>
             </div>
 
             {loginError && (
@@ -324,36 +327,97 @@ export default function Login() {
             )}
 
             <div className="space-y-4">
-              <div>
-                <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="ejemplo@correo.com"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
-                />
+              <div className="grid grid-cols-3 gap-1.5 bg-[#07090e] border border-slate-800 rounded-xl p-1">
+                {[
+                  ["parent", "Padre"],
+                  ["coach", "Entrenador"],
+                  ["admin", "Administrador"]
+                ].map(([type, label]) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setLoginUserType(type);
+                      setLoginError("");
+                    }}
+                    className={`py-2 rounded-lg text-[9px] font-bold uppercase transition-all ${
+                      loginUserType === type ? "bg-[#10b981] text-slate-950" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <label className="text-[9px] text-slate-400 font-bold block mb-1">CONTRASEÑA</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
-                />
-              </div>
+              {loginUserType === "parent" ? (
+                <>
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">TELÉFONO CELULAR</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="+57 300 123 4567"
+                      value={loginPhone}
+                      onChange={(e) => {
+                        setLoginPhone(e.target.value);
+                        setPhoneCodeSent(false);
+                        setConfirmationResult(null);
+                      }}
+                      className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+
+                  {phoneCodeSent && (
+                    <div>
+                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CÓDIGO SMS</label>
+                      <input
+                        type="text"
+                        required
+                        inputMode="numeric"
+                        placeholder="Código recibido"
+                        value={smsCode}
+                        onChange={(e) => setSmsCode(e.target.value)}
+                        className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="ejemplo@correo.com"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">CONTRASEÑA</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
+                    />
+                  </div>
+                </>
+              )}
             </div>
+
+            <div id="recaptcha-container" />
 
             <button
               type="submit"
               className="w-full bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 mt-2 cursor-pointer uppercase tracking-wider"
             >
-              Iniciar Sesión
+              {loginUserType === "parent" && !phoneCodeSent ? "Enviar Código" : "Iniciar Sesión"}
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
@@ -366,7 +430,7 @@ export default function Login() {
               <form onSubmit={handleNextStep} className="bg-[#0e121e]/80 border border-slate-900 p-6 rounded-3xl shadow-xl space-y-4 font-sans">
                 <div className="text-center mb-2">
                   <h2 className="font-display font-bold text-sm text-slate-200 uppercase tracking-wider">Paso 1: Ficha del Atleta</h2>
-                  <p className="text-[11px] text-slate-500 mt-1">Completa los datos para crear tu cuenta y calcular la categoría deportiva.</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Completa los datos del alumno y acudiente para calcular la categoría deportiva.</p>
                 </div>
 
                 {registerError && (
@@ -388,38 +452,12 @@ export default function Login() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO</label>
-                      <input
-                        type="email"
-                        required
-                        placeholder="ejemplo@correo.com"
-                        value={parentEmail}
-                        onChange={(e) => setParentEmail(e.target.value)}
-                        className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CONTRASEÑA DE ACCESO</label>
-                      <input
-                        type="password"
-                        required
-                        minLength="6"
-                        placeholder="Mínimo 6 caracteres"
-                        value={parentPassword}
-                        onChange={(e) => setParentPassword(e.target.value)}
-                        className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
-                      />
-                    </div>
-                  </div>
-
                   <div>
                     <label className="text-[9px] text-slate-400 font-bold block mb-1">TELÉFONO DE CONTACTO</label>
                     <input
                       type="tel"
                       required
-                      placeholder="Ej. 300 123 4567"
+                      placeholder="+57 300 123 4567"
                       value={parentPhone}
                       onChange={(e) => setParentPhone(e.target.value)}
                       className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"

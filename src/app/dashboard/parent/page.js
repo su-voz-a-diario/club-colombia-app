@@ -94,17 +94,22 @@ export default function ParentDashboard() {
         const response = await fetch("/api/auth/session");
         if (!response.ok) return;
         const session = await response.json();
-        if (cancelled || !session.email) return;
-        const email = session.email.toLowerCase();
+        if (cancelled || !session.uid) return;
+        const email = session.email ? session.email.toLowerCase() : "";
         setUserEmail(email);
         setParentUid(session.uid || "");
 
         // 1. Escuchar perfil del usuario en Firestore
-        unsubscribeUser = onSnapshot(doc(db, "users", email), (docSnap) => {
+        const userDocId = session.role === "parent" ? session.uid : email;
+        unsubscribeUser = onSnapshot(doc(db, "users", userDocId), (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data();
-            if (userData.name) setRepresentativeName(userData.name);
-            if (userData.studentId) setStudentId(userData.studentId);
+            if (userData.displayName || userData.name) setRepresentativeName(userData.displayName || userData.name);
+            if (Array.isArray(userData.studentIds) && userData.studentIds.length > 0) {
+              setStudentId(userData.studentIds[0]);
+            } else if (userData.studentId) {
+              setStudentId(userData.studentId);
+            }
             if (userData.studentName) setStudentName(userData.studentName);
             if (userData.categoryName) setCategoryName(userData.categoryName);
             if (userData.status) {
@@ -127,7 +132,7 @@ export default function ParentDashboard() {
 
   // Escuchar estudiante, evaluaciones y pagos correspondientes una vez que sabemos el nombre del estudiante y el correo
   useEffect(() => {
-    if ((!studentId && !studentName) || !userEmail) return;
+    if ((!studentId && !studentName) || (!parentUid && !userEmail)) return;
 
     // 2. Escuchar datos dinámicos del estudiante.
     // Compatibilidad legacy: si el usuario aún no tiene studentId, se consulta por nombre temporalmente.
@@ -169,7 +174,9 @@ export default function ParentDashboard() {
     });
 
     // 4. Escuchar historial de pagos del usuario en Firestore
-    const qPays = query(collection(db, "payments"), where("parentEmail", "==", userEmail.toLowerCase()));
+    const qPays = parentUid
+      ? query(collection(db, "payments"), where("parentUid", "==", parentUid))
+      : query(collection(db, "payments"), where("parentEmail", "==", userEmail.toLowerCase()));
     const unsubscribePayments = onSnapshot(qPays, (snapshot) => {
       const pays = [];
       snapshot.forEach((doc) => {
@@ -205,7 +212,7 @@ export default function ParentDashboard() {
       unsubscribeEvents();
       unsubscribeDrills();
     };
-  }, [studentId, studentName, userEmail, categoryName]);
+  }, [studentId, studentName, userEmail, parentUid, categoryName]);
 
   // Manejar respuesta de RSVP
   const handleRSVP = async (eventId, response) => {
@@ -222,7 +229,7 @@ export default function ParentDashboard() {
   };
 
   const handlePaymentSuccess = async (amount, paymentLabel) => {
-    if (!userEmail || !studentName) return;
+    if ((!parentUid && !userEmail) || !studentName) return;
 
     try {
       // 1. Guardar solicitud en la colección 'payments' en Firestore
@@ -241,7 +248,7 @@ export default function ParentDashboard() {
       });
 
       // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario y del estudiante
-      await updateDoc(doc(db, "users", userEmail.toLowerCase()), {
+      await updateDoc(doc(db, "users", parentUid || userEmail.toLowerCase()), {
         status: "pending_validation"
       });
 

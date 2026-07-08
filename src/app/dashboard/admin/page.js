@@ -3,11 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video } from "lucide-react";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
+import { normalizeAndValidatePhone } from "@/lib/phone";
 import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 
 export default function AdminDashboard() {
   const formatCurrency = (val) => {
@@ -37,8 +36,6 @@ export default function AdminDashboard() {
   const [manualStudentAge, setManualStudentAge] = useState("");
   const [manualParentName, setManualParentName] = useState("");
   const [manualParentPhone, setManualParentPhone] = useState("");
-  const [manualParentEmail, setManualParentEmail] = useState("");
-  const [manualParentPassword, setManualParentPassword] = useState("");
   const [manualPaidCash, setManualPaidCash] = useState(false);
   const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
@@ -416,63 +413,20 @@ export default function AdminDashboard() {
       const newStudentId = studentDocRef.id;
       const normalizedName = normalizeStudentName(manualStudentName);
       const categoryId = categoryNameToId(category);
-      const normalizedParentEmail = manualParentEmail ? manualParentEmail.toLowerCase() : "";
-      let parentUid = "";
+      const normalizedParentPhone = normalizeAndValidatePhone(manualParentPhone);
+      const parentUid = "";
 
       localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
 
-      // 1. Registrar en Firebase Auth usando una aplicación secundaria para no desloguear al admin
-      if (manualParentEmail && manualParentPassword) {
-        try {
-          const config = auth.app.options;
-          const tempApp = initializeApp(config, "TempAdminRegisterApp");
-          const tempAuth = getAuth(tempApp);
-          
-          const userCredential = await createUserWithEmailAndPassword(tempAuth, manualParentEmail.toLowerCase(), manualParentPassword);
-          const user = userCredential.user;
-          parentUid = user.uid;
-          
-          // Registrar en 'users'
-          await setDoc(doc(db, "users", manualParentEmail.toLowerCase()), {
-            uid: user.uid,
-            email: manualParentEmail.toLowerCase(),
-            role: "parent",
-            name: manualParentName || (manualStudentName + " Acudiente"),
-            phone: manualParentPhone || "",
-            studentId: newStudentId,
-            studentName: manualStudentName,
-            categoryName: category,
-            status: manualPaidCash ? "active" : "suspended"
-          });
-
-          await signOut(tempAuth);
-          await deleteApp(tempApp);
-        } catch (err) {
-          console.error("Error creando cuenta en Auth secundario:", err);
-          // Si ya existe el usuario, de todas formas agregamos/actualizamos el doc de su perfil
-          if (err.code === "auth/email-already-in-use") {
-            await setDoc(doc(db, "users", manualParentEmail.toLowerCase()), {
-              email: manualParentEmail.toLowerCase(),
-              role: "parent",
-              name: manualParentName || (manualStudentName + " Acudiente"),
-              phone: manualParentPhone || "",
-              studentId: newStudentId,
-              studentName: manualStudentName,
-              categoryName: category,
-              status: manualPaidCash ? "active" : "suspended"
-            }, { merge: true });
-          }
-        }
-      }
-
-      // 2. Guardar deportista en la colección 'students' con ID estable.
+      // 1. Guardar deportista en la colección 'students' con ID estable.
       await setDoc(studentDocRef, {
         studentId: newStudentId,
         name: manualStudentName,
         normalizedName,
         age: ageNum,
         parentName: manualParentName,
-        parentEmail: normalizedParentEmail,
+        parentPhone: normalizedParentPhone,
+        parentEmail: "",
         parentUid,
         categoryId,
         category: category,
@@ -496,7 +450,7 @@ export default function AdminDashboard() {
           paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
           date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
           status: "approved",
-          parentEmail: normalizedParentEmail,
+          parentEmail: "",
           parentUid,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
@@ -511,8 +465,6 @@ export default function AdminDashboard() {
     setManualStudentAge("");
     setManualParentName("");
     setManualParentPhone("");
-    setManualParentEmail("");
-    setManualParentPassword("");
     setManualPaidCash(false);
     setManualPaymentConcept("monthly");
     setShowAddForm(false);
@@ -769,33 +721,9 @@ export default function AdminDashboard() {
                       <input
                         type="tel"
                         required
-                        placeholder="Ej. 418 123 4567"
+                        placeholder="+57 300 123 4567"
                         value={manualParentPhone}
                         onChange={(e) => setManualParentPhone(e.target.value)}
-                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO (LOGIN DEL PADRE)</label>
-                      <input
-                        type="email"
-                        required
-                        placeholder="Ej. acudiente@correo.com"
-                        value={manualParentEmail}
-                        onChange={(e) => setManualParentEmail(e.target.value)}
-                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] text-slate-400 font-bold block mb-1">CONTRASEÑA DE ACCESO</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="Ej. acudiente123"
-                        value={manualParentPassword}
-                        onChange={(e) => setManualParentPassword(e.target.value)}
                         className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
                       />
                     </div>

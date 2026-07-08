@@ -1,5 +1,6 @@
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { getSessionCookieName, SESSION_EXPIRES_IN_MS } from "@/lib/authSession";
+import { normalizeAndValidatePhone } from "@/lib/phone";
 
 const ALLOWED_ROLES = new Set(["admin", "coach", "parent"]);
 const MAX_ID_TOKEN_AGE_SECONDS = 5 * 60;
@@ -8,18 +9,7 @@ function normalizeEmail(email) {
   return typeof email === "string" ? email.toLowerCase() : "";
 }
 
-async function getCurrentUserProfile(decodedToken) {
-  const email = normalizeEmail(decodedToken.email);
-  if (!email || !decodedToken.uid) {
-    return null;
-  }
-
-  const userDoc = await getAdminDb().collection("users").doc(email).get();
-  if (!userDoc.exists) {
-    return null;
-  }
-
-  const profile = userDoc.data();
+function buildSessionFromProfile(decodedToken, profile, extra = {}) {
   if (!ALLOWED_ROLES.has(profile.role)) {
     return null;
   }
@@ -30,10 +20,125 @@ async function getCurrentUserProfile(decodedToken) {
 
   return {
     uid: decodedToken.uid,
-    email,
+    email: profile.email || normalizeEmail(decodedToken.email),
+    phone: profile.phone || decodedToken.phone_number || "",
     role: profile.role,
-    status: profile.status || "active"
+    status: profile.status || "active",
+    studentIds: Array.isArray(profile.studentIds) ? profile.studentIds : [],
+    ...extra
   };
+}
+
+async function getEmailUserProfile(decodedToken) {
+  const email = normalizeEmail(decodedToken.email);
+  if (!email || !decodedToken.uid) {
+    return null;
+  }
+
+  const db = getAdminDb();
+  const uidDoc = await db.collection("users").doc(decodedToken.uid).get();
+  if (uidDoc.exists) {
+    const session = buildSessionFromProfile(decodedToken, uidDoc.data());
+    if (session?.role === "parent") {
+      return null;
+    }
+
+    return session;
+  }
+
+  const emailDoc = await db.collection("users").doc(email).get();
+  if (!emailDoc.exists) {
+    return null;
+  }
+
+  const session = buildSessionFromProfile(decodedToken, emailDoc.data());
+  if (session?.role === "parent") {
+    return null;
+  }
+
+  return session;
+}
+
+async function linkParentStudents(db, uid, phone) {
+  const studentsSnap = await db
+    .collection("students")
+    .where("parentPhone", "==", phone)
+    .get();
+
+  const studentIds = [];
+  const batch = db.batch();
+  let pendingWrites = 0;
+
+  studentsSnap.forEach((studentDoc) => {
+    const studentData = studentDoc.data();
+    const studentId = studentData.studentId || studentDoc.id;
+    studentIds.push(studentId);
+
+    if (studentData.parentUid !== uid || studentData.studentId !== studentId) {
+      batch.set(studentDoc.ref, {
+        studentId,
+        parentUid: uid,
+        updatedAt: new Date()
+      }, { merge: true });
+      pendingWrites += 1;
+    }
+  });
+
+  if (pendingWrites > 0) {
+    await batch.commit();
+  }
+
+  return studentIds;
+}
+
+async function getPhoneParentProfile(decodedToken) {
+  if (!decodedToken.uid || !decodedToken.phone_number) {
+    return null;
+  }
+
+  const phone = normalizeAndValidatePhone(decodedToken.phone_number);
+  const db = getAdminDb();
+  const userRef = db.collection("users").doc(decodedToken.uid);
+  const userSnap = await userRef.get();
+  const existingProfile = userSnap.exists ? userSnap.data() : {};
+
+  if (existingProfile.role && existingProfile.role !== "parent") {
+    return null;
+  }
+
+  if (existingProfile.phone && existingProfile.phone !== phone) {
+    return null;
+  }
+
+  const studentIds = await linkParentStudents(db, decodedToken.uid, phone);
+  const patch = {
+    uid: decodedToken.uid,
+    phone,
+    role: "parent",
+    status: existingProfile.status || "active",
+    studentIds,
+    updatedAt: new Date()
+  };
+
+  if (!userSnap.exists) {
+    patch.displayName = "";
+    patch.createdAt = new Date();
+  }
+
+  await userRef.set(patch, { merge: true });
+
+  return buildSessionFromProfile(decodedToken, {
+    ...existingProfile,
+    ...patch
+  }, { studentIds });
+}
+
+async function getCurrentUserProfile(decodedToken) {
+  if (decodedToken.phone_number) {
+    return getPhoneParentProfile(decodedToken);
+  }
+
+  return getEmailUserProfile(decodedToken);
 }
 
 export async function createVerifiedSessionCookie(idToken) {

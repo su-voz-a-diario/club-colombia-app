@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
 
-const REQUIRED_FIELDS = ["name", "parentName", "parentEmail", "category"];
+const REQUIRED_FIELDS = ["name", "parentName", "parentPhone", "category"];
 const VALID_STATUSES = new Set(["active", "suspended", "pending_validation", "on_hold"]);
 const VALID_BILLING_STATUSES = new Set(["paid", "pending_payment", "pending_validation", "on_hold"]);
 const DEFAULT_STATUS = "suspended";
@@ -133,15 +133,47 @@ function normalizeEmail(email) {
   return (email || "").trim().toLowerCase();
 }
 
+function normalizePhoneNumber(phone, defaultRegionCode = "57") {
+  const rawPhone = String(phone || "").trim();
+  if (!rawPhone) return "";
+
+  const hasInternationalPrefix = rawPhone.startsWith("+");
+  const digits = rawPhone.replace(/\D/g, "");
+  if (!digits) return "";
+
+  let normalizedDigits = digits;
+  if (hasInternationalPrefix) {
+    normalizedDigits = digits;
+  } else if (digits.startsWith("00")) {
+    normalizedDigits = digits.slice(2);
+  } else if (digits.length === 10) {
+    normalizedDigits = `${defaultRegionCode}${digits}`;
+  }
+
+  return `+${normalizedDigits}`;
+}
+
+function isValidE164Phone(phone) {
+  return /^\+[1-9]\d{7,14}$/.test(String(phone || ""));
+}
+
+function normalizeAndValidatePhone(phone) {
+  const normalizedPhone = normalizePhoneNumber(phone);
+  if (!isValidE164Phone(normalizedPhone)) {
+    throw new Error("parentPhone debe ser valido y estar en formato internacional E.164");
+  }
+  return normalizedPhone;
+}
+
 function getMissingFields(student) {
   return REQUIRED_FIELDS.filter((field) => !String(student[field] || "").trim());
 }
 
-async function findParentUid(parentEmail, explicitParentUid) {
+async function findParentUid(parentPhone, explicitParentUid) {
   if (explicitParentUid) return explicitParentUid;
 
   try {
-    const userRecord = await admin.auth().getUserByEmail(parentEmail);
+    const userRecord = await admin.auth().getUserByPhoneNumber(parentPhone);
     return userRecord.uid;
   } catch (error) {
     if (error.code === "auth/user-not-found") {
@@ -159,11 +191,11 @@ async function findExistingStudent(db, student) {
   }
 
   const normalizedName = normalizeStudentName(student.name);
-  const parentEmail = normalizeEmail(student.parentEmail);
+  const parentPhone = normalizeAndValidatePhone(student.parentPhone);
   const querySnap = await db
     .collection("students")
     .where("normalizedName", "==", normalizedName)
-    .where("parentEmail", "==", parentEmail)
+    .where("parentPhone", "==", parentPhone)
     .limit(1)
     .get();
 
@@ -187,18 +219,23 @@ function pickMissingFields(existingData, candidateData) {
 }
 
 async function upsertParentUser(db, studentData, commit, report) {
-  const parentEmail = studentData.parentEmail;
-  const userRef = db.collection("users").doc(parentEmail);
+  if (!studentData.parentUid) {
+    report.parentsPendingLogin.push(studentData.parentPhone);
+    return;
+  }
+
+  const userRef = db.collection("users").doc(studentData.parentUid);
   const userSnap = await userRef.get();
 
   if (!userSnap.exists) {
-    report.parentsCreated.push(parentEmail);
+    report.parentsCreated.push(studentData.parentPhone);
     if (commit) {
       await userRef.set({
-        uid: studentData.parentUid || "",
-        email: parentEmail,
+        uid: studentData.parentUid,
+        phone: studentData.parentPhone,
+        email: studentData.parentEmail || "",
         role: "parent",
-        name: studentData.parentName,
+        displayName: studentData.parentName,
         studentId: studentData.studentId,
         studentIds: [studentData.studentId],
         studentName: studentData.name,
@@ -211,13 +248,14 @@ async function upsertParentUser(db, studentData, commit, report) {
     return;
   }
 
-  report.parentsExisting.push(parentEmail);
+  report.parentsExisting.push(studentData.parentPhone);
   const existing = userSnap.data();
   const missingPatch = pickMissingFields(existing, {
-    uid: studentData.parentUid || "",
-    email: parentEmail,
+    uid: studentData.parentUid,
+    phone: studentData.parentPhone,
+    email: studentData.parentEmail || "",
     role: "parent",
-    name: studentData.parentName,
+    displayName: studentData.parentName,
     studentId: studentData.studentId,
     studentName: studentData.name,
     categoryName: studentData.category,
@@ -237,6 +275,7 @@ async function upsertParentUser(db, studentData, commit, report) {
 
 function buildStudentData(rawStudent, studentId, parentUid) {
   const parentEmail = normalizeEmail(rawStudent.parentEmail);
+  const parentPhone = normalizeAndValidatePhone(rawStudent.parentPhone);
   const category = String(rawStudent.category || "").trim();
   const status = VALID_STATUSES.has(rawStudent.status) ? rawStudent.status : DEFAULT_STATUS;
   const billingStatus = VALID_BILLING_STATUSES.has(rawStudent.billingStatus)
@@ -249,6 +288,7 @@ function buildStudentData(rawStudent, studentId, parentUid) {
     normalizedName: normalizeStudentName(rawStudent.name),
     parentName: String(rawStudent.parentName || "").trim(),
     parentEmail,
+    parentPhone,
     parentUid: parentUid || "",
     categoryId: rawStudent.categoryId || categoryNameToId(category),
     category,
@@ -269,8 +309,9 @@ async function importStudent(db, rawStudent, index, commit, report) {
     return;
   }
 
+  const parentPhone = normalizeAndValidatePhone(rawStudent.parentPhone);
   const parentEmail = normalizeEmail(rawStudent.parentEmail);
-  const existingStudent = await findExistingStudent(db, { ...rawStudent, parentEmail });
+  const existingStudent = await findExistingStudent(db, { ...rawStudent, parentEmail, parentPhone });
 
   if (existingStudent) {
     const existingData = existingStudent.snap.data();
@@ -287,7 +328,7 @@ async function importStudent(db, rawStudent, index, commit, report) {
     ? db.collection("students").doc(rawStudent.studentId)
     : db.collection("students").doc();
   const studentId = studentRef.id;
-  const parentUid = await findParentUid(parentEmail, rawStudent.parentUid);
+  const parentUid = await findParentUid(parentPhone, rawStudent.parentUid);
   const studentData = buildStudentData(rawStudent, studentId, parentUid);
 
   report.studentsCreated.push({ name: studentData.name, studentId });
@@ -314,6 +355,7 @@ async function main() {
     skipped: [],
     parentsCreated: [],
     parentsExisting: [],
+    parentsPendingLogin: [],
     errors: [],
     missingFields: []
   };

@@ -41,6 +41,7 @@ node scripts/import-students.js --file alumnos.csv --commit
   {
     "name": "Nombre del Alumno",
     "parentName": "Nombre del Acudiente",
+    "parentPhone": "+573001234567",
     "parentEmail": "acudiente@example.com",
     "category": "Sub-10 Competitivo",
     "categoryId": "sub-10-competitivo",
@@ -56,13 +57,14 @@ Campos obligatorios:
 
 - `name`
 - `parentName`
-- `parentEmail`
+- `parentPhone`
 - `category`
 
 Campos opcionales:
 
 - `studentId`
 - `parentUid`
+- `parentEmail`
 - `categoryId`
 - `assignedCoachUid`
 - `status`
@@ -72,8 +74,8 @@ Campos opcionales:
 ## CSV esperado
 
 ```csv
-name,parentName,parentEmail,category,categoryId,assignedCoachUid,status,billingStatus,healthStatus
-Nombre del Alumno,Nombre del Acudiente,acudiente@example.com,Sub-10 Competitivo,sub-10-competitivo,,suspended,pending_payment,optimal
+name,parentName,parentPhone,parentEmail,category,categoryId,assignedCoachUid,status,billingStatus,healthStatus
+Nombre del Alumno,Nombre del Acudiente,+573001234567,acudiente@example.com,Sub-10 Competitivo,sub-10-competitivo,,suspended,pending_payment,optimal
 ```
 
 ## Idempotencia
@@ -81,8 +83,12 @@ Nombre del Alumno,Nombre del Acudiente,acudiente@example.com,Sub-10 Competitivo,
 El script omite un alumno si encuentra:
 
 - el mismo `studentId`, o
-- la misma combinacion `normalizedName + parentEmail`.
+- la misma combinacion `normalizedName + parentPhone`.
 
-Si el padre ya existe en `users/{parentEmail}`, solo agrega campos faltantes y anade `studentId` a `studentIds`.
+El telefono se normaliza a formato E.164 para evitar duplicados por formatos distintos. Por ejemplo, `300 123 4567` se guarda como `+573001234567`.
+
+Si el padre ya existe en Firebase Auth por telefono, el script actualiza `users/{uid}` y anade `studentId` a `studentIds`.
+
+Si el padre todavia no ha iniciado sesion por SMS, el alumno queda con `parentPhone` y `parentUid` vacio. La vinculacion de `users/{uid}` y `students.parentUid` ocurre automaticamente cuando el padre entra por primera vez con Firebase Phone Authentication.
 
 No sobrescribe datos criticos de padres existentes como `role`, `status` o `name`.
