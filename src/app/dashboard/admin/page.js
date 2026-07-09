@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video } from "lucide-react";
+import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video, Pencil } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
@@ -60,6 +60,15 @@ export default function AdminDashboard() {
   const [drillVideoUrl, setDrillVideoUrl] = useState("");
   const [drillSaved, setDrillSaved] = useState(false);
   const [drills, setDrills] = useState([]);
+  const [editingDrillId, setEditingDrillId] = useState(null);
+
+  // Phone update modal states
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [selectedParentStudent, setSelectedParentStudent] = useState(null);
+  const [newParentPhone, setNewParentPhone] = useState("");
+  const [phoneUpdating, setPhoneUpdating] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+  const [phoneSuccess, setPhoneSuccess] = useState("");
 
   // Leaderboard lists
   const [evaluations, setEvaluations] = useState([]);
@@ -106,19 +115,82 @@ export default function AdminDashboard() {
     }
   };
 
+  const parseVideoUrl = (url) => {
+    if (!url) return { type: "unknown", embedUrl: "" };
+    const trimmed = url.trim();
+    const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+    const ytMatch = trimmed.match(ytRegex);
+    if (ytMatch && ytMatch[1]) {
+      return {
+        type: "youtube",
+        embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}`
+      };
+    }
+    const vimeoRegex = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/;
+    const vimeoMatch = trimmed.match(vimeoRegex);
+    if (vimeoMatch && vimeoMatch[1]) {
+      return {
+        type: "vimeo",
+        embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}`
+      };
+    }
+    return {
+      type: "mp4",
+      embedUrl: trimmed
+    };
+  };
+
+  const handleEditDrillClick = (drill) => {
+    setDrillTitle(drill.title);
+    setDrillDescription(drill.description || "");
+    setDrillCategory(drill.category || "técnica");
+    setDrillVideoUrl(drill.videoUrl);
+    setEditingDrillId(drill.id);
+  };
+
+  const handleCancelEditDrill = () => {
+    setDrillTitle("");
+    setDrillDescription("");
+    setDrillCategory("técnica");
+    setDrillVideoUrl("");
+    setEditingDrillId(null);
+  };
+
   const handleCreateDrill = async (e) => {
     e.preventDefault();
-    if (!drillTitle || !drillVideoUrl) return;
+    const titleClean = drillTitle.trim();
+    const urlClean = drillVideoUrl.trim();
+    const descClean = drillDescription.trim();
+    const catClean = drillCategory.trim();
+
+    if (!titleClean || !urlClean || !catClean) {
+      alert("El título, la categoría y la URL son campos obligatorios.");
+      return;
+    }
 
     try {
-      const drillId = drillTitle.toLowerCase().replace(/[^a-z0-9]/g, "-");
-      await setDoc(doc(db, "drills", drillId), {
-        title: drillTitle,
-        description: drillDescription,
-        category: drillCategory,
-        videoUrl: drillVideoUrl,
-        date: new Date().toLocaleDateString("es-CO")
-      });
+      if (editingDrillId) {
+        // Guardar cambios del video existente
+        await setDoc(doc(db, "drills", editingDrillId), {
+          title: titleClean,
+          description: descClean,
+          category: catClean,
+          videoUrl: urlClean,
+          date: new Date().toLocaleDateString("es-CO")
+        }, { merge: true });
+        
+        setEditingDrillId(null);
+      } else {
+        // Crear nuevo video
+        const drillId = titleClean.toLowerCase().replace(/[^a-z0-9]/g, "-");
+        await setDoc(doc(db, "drills", drillId), {
+          title: titleClean,
+          description: descClean,
+          category: catClean,
+          videoUrl: urlClean,
+          date: new Date().toLocaleDateString("es-CO")
+        });
+      }
 
       setDrillSaved(true);
       setTimeout(() => {
@@ -126,19 +198,76 @@ export default function AdminDashboard() {
         setDrillTitle("");
         setDrillDescription("");
         setDrillVideoUrl("");
+        setDrillCategory("técnica");
       }, 2500);
     } catch (err) {
-      console.error("Error creating drill:", err);
+      console.error("Error saving drill:", err);
     }
   };
 
   const handleDeleteDrill = async (drillId) => {
-    const confirmDel = window.confirm("¿Seguro que deseas eliminar este ejercicio?");
+    const confirmDel = window.confirm("¿Seguro que deseas eliminar este ejercicio de la biblioteca permanentemente?");
     if (!confirmDel) return;
     try {
       await deleteDoc(doc(db, "drills", drillId));
     } catch (err) {
       console.error("Error deleting drill:", err);
+    }
+  };
+
+  const handleOpenPhoneModal = (student) => {
+    setSelectedParentStudent(student);
+    setNewParentPhone(student.parentPhone || "");
+    setPhoneError("");
+    setPhoneSuccess("");
+    setPhoneModalOpen(true);
+  };
+
+  const handleUpdatePhoneSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedParentStudent) return;
+    setPhoneUpdating(true);
+    setPhoneError("");
+    setPhoneSuccess("");
+
+    try {
+      const response = await fetch("/api/admin/update-parent-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentUid: selectedParentStudent.parentUid || "",
+          oldPhone: selectedParentStudent.parentPhone || "",
+          newPhone: newParentPhone
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Error al actualizar el teléfono.");
+      }
+
+      setPhoneSuccess(`Teléfono actualizado exitosamente a ${data.phone}.`);
+      
+      // Actualizar el estado local de estudiantes
+      setStudents(prev => prev.map(s => {
+        const matchesUid = selectedParentStudent.parentUid && s.parentUid === selectedParentStudent.parentUid;
+        const matchesPhone = !selectedParentStudent.parentUid && s.parentPhone === selectedParentStudent.parentPhone;
+        if (matchesUid || matchesPhone) {
+          return { ...s, parentPhone: data.phone };
+        }
+        return s;
+      }));
+
+      setTimeout(() => {
+        setPhoneModalOpen(false);
+        setSelectedParentStudent(null);
+        setNewParentPhone("");
+      }, 2000);
+
+    } catch (err) {
+      setPhoneError(err.message);
+    } finally {
+      setPhoneUpdating(false);
     }
   };
 
@@ -842,12 +971,19 @@ export default function AdminDashboard() {
                             {student.assignment === "automatic" ? "Automática" : "Override Manual"}
                           </span>
                         </td>
-                        <td className="py-3.5 text-right">
+                        <td className="py-3.5 text-right space-x-1.5">
                           <button
                             onClick={() => setSelectedStudent(student)}
                             className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
                           >
                             Override
+                          </button>
+                          <button
+                            onClick={() => handleOpenPhoneModal(student)}
+                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                            title="Editar teléfono del acudiente"
+                          >
+                            Teléfono
                           </button>
                         </td>
                       </tr>
@@ -907,6 +1043,99 @@ export default function AdminDashboard() {
                         className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer"
                       >
                         Guardar Excepción
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* MODAL / FORM DE ACTUALIZACIÓN DE TELÉFONO DE ACUDIENTE */}
+              {phoneModalOpen && selectedParentStudent && (
+                <div className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in mt-6 space-y-4 font-sans text-left">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5 text-[#10b981]">
+                      <Video className="w-4 h-4" />
+                      <h3 className="font-display font-bold text-xs uppercase tracking-wider">Editar Teléfono del Acudiente</h3>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPhoneModalOpen(false);
+                        setSelectedParentStudent(null);
+                        setNewParentPhone("");
+                      }}
+                      className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 bg-slate-900/50 p-3.5 rounded-xl border border-slate-850 space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Deportista:</span>
+                      <span className="font-bold text-slate-200">{selectedParentStudent.name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Nombre Acudiente:</span>
+                      <span className="font-bold text-slate-200">{selectedParentStudent.parentName || "Sin nombre registrado"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Teléfono Actual:</span>
+                      <span className="font-bold text-slate-200 font-mono">{selectedParentStudent.parentPhone || "No asignado"}</span>
+                    </div>
+                    <div className="pt-1.5 border-t border-slate-800 text-[9px] text-slate-500 italic">
+                      {selectedParentStudent.parentUid ? (
+                        <span className="text-emerald-400 font-medium">➔ El acudiente ya está registrado. Se actualizará su cuenta de autenticación SMS en Firebase Auth y su perfil.</span>
+                      ) : (
+                        <span className="text-amber-400 font-medium">➔ El acudiente no se ha registrado aún. Se corregirá el teléfono de enlace en la ficha del alumno.</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {phoneError && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-xl text-[10px] font-medium">
+                      {phoneError}
+                    </div>
+                  )}
+
+                  {phoneSuccess && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-[10px] font-medium animate-pulse">
+                      {phoneSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleUpdatePhoneSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-[8px] text-slate-400 font-bold block mb-1">NUEVO NÚMERO DE TELÉFONO (E.164)</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ej. +521234567890 o 10 dígitos (se normalizará a +52...)"
+                        value={newParentPhone}
+                        onChange={(e) => setNewParentPhone(e.target.value)}
+                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green font-mono"
+                        disabled={phoneUpdating}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhoneModalOpen(false);
+                          setSelectedParentStudent(null);
+                          setNewParentPhone("");
+                        }}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-350 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                        disabled={phoneUpdating}
+                      >
+                        Cerrar
+                      </button>
+                      <button
+                        type="submit"
+                        className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                        disabled={phoneUpdating}
+                      >
+                        {phoneUpdating ? "Guardando..." : "Guardar Cambios"}
                       </button>
                     </div>
                   </form>
@@ -1244,7 +1473,7 @@ export default function AdminDashboard() {
               {drillSaved && (
                 <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-sans">
                   <CheckCircle className="w-4 h-4" />
-                  <span>Ejercicio publicado exitosamente en la biblioteca multimedia.</span>
+                  <span>Ejercicio guardado exitosamente en la biblioteca multimedia.</span>
                 </div>
               )}
 
@@ -1252,7 +1481,7 @@ export default function AdminDashboard() {
               <form onSubmit={handleCreateDrill} className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl space-y-4 font-sans text-left">
                 <div className="flex items-center gap-1.5 text-[#10b981] font-display font-bold text-xs uppercase tracking-wider">
                   <Video className="w-4 h-4" />
-                  Publicar Nuevo Video de Entrenamiento
+                  {editingDrillId ? "Editar Video de Entrenamiento" : "Publicar Nuevo Video de Entrenamiento"}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1278,9 +1507,9 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-[9px] text-slate-400 font-bold block mb-1">URL DEL VIDEO (MP4 EMBEBIBLE)</label>
+                    <label className="text-[9px] text-slate-400 font-bold block mb-1">URL DEL VIDEO (YOUTUBE, VIMEO O MP4)</label>
                     <input
-                      type="url" required placeholder="Ej. https://www.w3schools.com/html/mov_bbb.mp4"
+                      type="url" required placeholder="Ej. https://www.youtube.com/watch?v=... o archivo .mp4"
                       value={drillVideoUrl} onChange={(e) => setDrillVideoUrl(e.target.value)}
                       className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
                     />
@@ -1296,12 +1525,21 @@ export default function AdminDashboard() {
                   />
                 </div>
 
-                <div className="flex justify-end pt-1">
+                <div className="flex justify-end gap-2 pt-1">
+                  {editingDrillId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEditDrill}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-350 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                    >
+                      Cancelar Edición
+                    </button>
+                  )}
                   <button
                     type="submit"
                     className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
                   >
-                    Publicar Video
+                    {editingDrillId ? "Guardar Cambios" : "Publicar Video"}
                   </button>
                 </div>
               </form>
@@ -1314,21 +1552,50 @@ export default function AdminDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {drills.map((drill) => (
-                      <div key={drill.id} className="bg-[#07090e]/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between gap-3 text-left">
+                      <div key={drill.id} className="bg-[#07090e]/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between gap-3 text-left animate-fade-in">
                         <div>
                           <div className="flex justify-between items-start gap-2">
                             <span className="text-[8px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-400 uppercase tracking-wider">{drill.category}</span>
-                            <button
-                              onClick={() => handleDeleteDrill(drill.id)}
-                              className="text-red-500 hover:text-red-400 transition-all cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center">
+                              <button
+                                type="button"
+                                onClick={() => handleEditDrillClick(drill)}
+                                className="text-emerald-500 hover:text-emerald-400 transition-all cursor-pointer mr-3"
+                                title="Editar ejercicio"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDrill(drill.id)}
+                                className="text-red-500 hover:text-red-400 transition-all cursor-pointer"
+                                title="Eliminar ejercicio"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                           <h4 className="font-bold text-slate-200 text-xs mt-1.5">{drill.title}</h4>
                           <p className="text-[10px] text-slate-450 mt-1 line-clamp-2 leading-relaxed font-sans">{drill.description}</p>
                         </div>
-                        <video src={drill.videoUrl} className="w-full rounded-lg bg-slate-950 aspect-video object-cover" controls />
+                        {(() => {
+                          const videoInfo = parseVideoUrl(drill.videoUrl);
+                          if (videoInfo.type === "youtube" || videoInfo.type === "vimeo") {
+                            return (
+                              <iframe
+                                src={videoInfo.embedUrl}
+                                title={drill.title}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video"
+                              />
+                            );
+                          } else {
+                            return (
+                              <video src={drill.videoUrl} className="w-full rounded-lg bg-slate-950 aspect-video object-cover" controls />
+                            );
+                          }
+                        })()}
                       </div>
                     ))}
                   </div>

@@ -11,6 +11,31 @@ import { db } from "@/lib/firebase";
 import { doc, onSnapshot, updateDoc, collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
 
 
+const parseVideoUrl = (url) => {
+  if (!url) return { type: "unknown", embedUrl: "" };
+  const trimmed = url.trim();
+  const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+  const ytMatch = trimmed.match(ytRegex);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      type: "youtube",
+      embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}`
+    };
+  }
+  const vimeoRegex = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/;
+  const vimeoMatch = trimmed.match(vimeoRegex);
+  if (vimeoMatch && vimeoMatch[1]) {
+    return {
+      type: "vimeo",
+      embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}`
+    };
+  }
+  return {
+    type: "mp4",
+    embedUrl: trimmed
+  };
+};
+
 export default function ParentDashboard() {
   const [studentName, setStudentName] = useState("");
   const [studentId, setStudentId] = useState("");
@@ -735,38 +760,55 @@ export default function ParentDashboard() {
                                 </div>
                               </div>
                               
-                              <div className="space-y-2">
-                                <video
-                                  ref={(el) => { videoRefs.current[drill.id] = el; }}
-                                  src={drill.videoUrl}
-                                  controls
-                                  playsInline
-                                  className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video object-cover"
-                                />
+                              {(() => {
+                                const videoInfo = parseVideoUrl(drill.videoUrl);
+                                if (videoInfo.type === "youtube" || videoInfo.type === "vimeo") {
+                                  return (
+                                    <iframe
+                                      src={videoInfo.embedUrl}
+                                      title={drill.title}
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                      allowFullScreen
+                                      className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video"
+                                    />
+                                  );
+                                } else {
+                                  return (
+                                    <div className="space-y-2">
+                                      <video
+                                        ref={(el) => { videoRefs.current[drill.id] = el; }}
+                                        src={drill.videoUrl}
+                                        controls
+                                        playsInline
+                                        className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video object-cover"
+                                      />
 
-                                {/* Playback speed controls */}
-                                <div className="flex items-center justify-between bg-[#07090e]/90 border border-slate-900 p-2.5 rounded-xl text-[10px]">
-                                  <span className="text-slate-450 font-bold uppercase tracking-wider font-sans">Velocidad</span>
-                                  <div className="flex gap-1.5">
-                                    {[0.5, 0.75, 1.0].map((speed) => {
-                                      const isSelected = activePlaybackRates[drill.id] === speed || (!activePlaybackRates[drill.id] && speed === 1.0);
-                                      return (
-                                        <button
-                                          key={speed}
-                                          onClick={() => handleSetSpeed(drill.id, speed)}
-                                          className={`px-2 py-1 rounded-md font-mono font-bold transition-all cursor-pointer ${
-                                            isSelected 
-                                              ? "bg-[#10b981] text-slate-950 font-black shadow" 
-                                              : "bg-slate-900 border border-slate-850 text-slate-400 hover:text-slate-200"
-                                          }`}
-                                        >
-                                          {speed}x
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
+                                      {/* Playback speed controls */}
+                                      <div className="flex items-center justify-between bg-[#07090e]/90 border border-slate-900 p-2.5 rounded-xl text-[10px]">
+                                        <span className="text-slate-450 font-bold uppercase tracking-wider font-sans">Velocidad</span>
+                                        <div className="flex gap-1.5">
+                                          {[0.5, 0.75, 1.0].map((speed) => {
+                                            const isSelected = activePlaybackRates[drill.id] === speed || (!activePlaybackRates[drill.id] && speed === 1.0);
+                                            return (
+                                              <button
+                                                key={speed}
+                                                onClick={() => handleSetSpeed(drill.id, speed)}
+                                                className={`px-2 py-1 rounded-md font-mono font-bold transition-all cursor-pointer ${
+                                                  isSelected 
+                                                    ? "bg-[#10b981] text-slate-950 font-black shadow" 
+                                                    : "bg-slate-900 border border-slate-850 text-slate-400 hover:text-slate-200"
+                                                }`}
+                                              >
+                                                {speed}x
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                              })()}
                             </div>
                           ))}
                         </div>
