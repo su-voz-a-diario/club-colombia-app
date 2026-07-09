@@ -35,7 +35,7 @@ export async function seedFirebaseDatabase() {
 
     const defaultUsers = [
       {
-        email: "luis.lopez@clubcolombia.com",
+        email: "tododeportesluis@gmail.com",
         password: "luis123",
         role: "admin",
         name: "Profe Luis López",
@@ -47,15 +47,6 @@ export async function seedFirebaseDatabase() {
         role: "coach",
         name: "Entrenador Mario Silva",
         status: "active"
-      },
-      {
-        email: "ricardo.garcia@gmail.com",
-        password: "ricardo123",
-        role: "parent",
-        name: "Ricardo García",
-        studentName: "Juan Andrés García",
-        categoryName: "Sub-10 Competitivo",
-        status: "suspended"
       }
     ];
 
