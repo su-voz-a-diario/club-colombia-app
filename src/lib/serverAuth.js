@@ -46,6 +46,8 @@ async function getEmailUserProfile(decodedToken) {
     return session;
   }
 
+  // Legacy compatibility
+  // TODO remove after migration
   const emailDoc = await db.collection("users").doc(email).get();
   if (!emailDoc.exists) {
     return null;

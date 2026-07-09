@@ -276,7 +276,7 @@ export default function ParentDashboard() {
       });
 
       // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario y del estudiante
-      await updateDoc(doc(db, "users", parentUid || userEmail.toLowerCase()), {
+      await updateDoc(doc(db, "users", parentUid), {
         status: "pending_validation"
       });
 

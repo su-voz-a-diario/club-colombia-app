@@ -9,7 +9,7 @@ import QRGenerator from "@/components/QRGenerator";
 import { auth, db } from "@/lib/firebase";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
-import { RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber } from "firebase/auth";
+import { RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber, sendPasswordResetEmail } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function Login() {
@@ -25,6 +25,13 @@ export default function Login() {
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [loginError, setLoginError] = useState("");
+  
+  // Estados para Recuperación de Contraseña
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSuccessMessage, setResetSuccessMessage] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
 
   // Estados para simulación de Inscripción
   const [registerStep, setRegisterStep] = useState(1); // 1: Datos, 2: Horarios/Pago, 3: Credencial QR
@@ -186,6 +193,36 @@ export default function Login() {
     }
   };
 
+  const handlePasswordResetSubmit = async (e) => {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccessMessage("");
+
+    const email = resetEmail.trim().toLowerCase();
+    if (!email) {
+      setResetError("Por favor ingresa tu correo electrónico.");
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSuccessMessage("Se ha enviado un correo electrónico de recuperación. Revisa tu bandeja de entrada.");
+      setResetEmail("");
+    } catch (err) {
+      console.error("Error al enviar correo de recuperación:", err);
+      if (err.code === "auth/user-not-found") {
+        setResetError("No existe ninguna cuenta registrada con este correo electrónico.");
+      } else if (err.code === "auth/invalid-email") {
+        setResetError("El formato del correo electrónico es inválido.");
+      } else {
+        setResetError("Ocurrió un error al intentar enviar el correo. Por favor intenta de nuevo.");
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError("");
@@ -219,6 +256,8 @@ export default function Login() {
       // 2. Leer perfil del usuario de Firestore
       let userDocSnap = await getDoc(doc(db, "users", authUser.uid));
       if (!userDocSnap.exists()) {
+        // Legacy compatibility
+        // TODO remove after migration
         userDocSnap = await getDoc(doc(db, "users", loginEmail.toLowerCase()));
       }
 
@@ -313,7 +352,7 @@ export default function Login() {
         )}
 
         {/* Tab Content: LOGIN */}
-        {activeTab === "login" && (
+        {activeTab === "login" && !showForgotPassword && (
           <form onSubmit={handleLoginSubmit} className="bg-[#0e121e]/80 border border-slate-900 p-6 rounded-3xl shadow-xl space-y-5 font-sans">
             <div className="text-center">
               <h2 className="font-display font-bold text-sm text-slate-200 uppercase tracking-wider">Ingreso de Usuarios</h2>
@@ -406,6 +445,20 @@ export default function Login() {
                       onChange={(e) => setLoginPassword(e.target.value)}
                       className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
                     />
+                    <div className="flex justify-end mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowForgotPassword(true);
+                          setResetEmail(loginEmail);
+                          setResetError("");
+                          setResetSuccessMessage("");
+                        }}
+                        className="text-[10px] text-slate-500 hover:text-[#10b981] transition-all font-semibold cursor-pointer"
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -420,6 +473,64 @@ export default function Login() {
               {loginUserType === "parent" && !phoneCodeSent ? "Enviar Código" : "Iniciar Sesión"}
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
+          </form>
+        )}
+
+        {/* Formulario de Recuperación de Contraseña */}
+        {activeTab === "login" && showForgotPassword && (
+          <form onSubmit={handlePasswordResetSubmit} className="bg-[#0e121e]/80 border border-slate-900 p-6 rounded-3xl shadow-xl space-y-5 font-sans">
+            <div className="text-center">
+              <h2 className="font-display font-bold text-sm text-slate-200 uppercase tracking-wider">Recuperar Contraseña</h2>
+              <p className="text-[11px] text-slate-500 mt-1">Ingresa tu correo electrónico y te enviaremos un enlace de restablecimiento.</p>
+            </div>
+
+            {resetError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[11px] text-center">
+                {resetError}
+              </div>
+            )}
+
+            {resetSuccessMessage && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-[11px] text-center">
+                {resetSuccessMessage}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[9px] text-slate-400 font-bold block mb-1">CORREO ELECTRÓNICO</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="ejemplo@correo.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="submit"
+                disabled={isResetting}
+                className="w-full bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer uppercase tracking-wider disabled:opacity-50"
+              >
+                {isResetting ? "Enviando..." : "Enviar Correo"}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setLoginError("");
+                }}
+                className="w-full bg-[#0e121e] border border-slate-800 text-slate-400 hover:text-slate-200 font-display font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer uppercase tracking-wider"
+              >
+                Volver al ingreso
+              </button>
+            </div>
           </form>
         )}
 

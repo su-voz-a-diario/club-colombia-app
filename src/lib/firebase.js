@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 
 // Configuración de Firebase para Club Colombia
@@ -65,8 +65,8 @@ export async function seedFirebaseDatabase() {
         const userCredential = await createUserWithEmailAndPassword(auth, u.email, u.password);
         const user = userCredential.user;
         
-        // Guardar perfil en la colección 'users'
-        await setDoc(doc(db, "users", u.email.toLowerCase()), {
+        // Guardar perfil en la colección 'users' bajo users/{uid}
+        await setDoc(doc(db, "users", user.uid), {
           uid: user.uid,
           email: u.email.toLowerCase(),
           role: u.role,
@@ -103,7 +103,18 @@ export async function seedFirebaseDatabase() {
       } catch (err) {
         // Si ya existe en auth, solo nos aseguramos de crear el documento en Firestore
         if (err.code === "auth/email-already-in-use") {
-          await setDoc(doc(db, "users", u.email.toLowerCase()), {
+          // Intentar buscar documento existente por campo email para no crear duplicados en users/{email}
+          const q = query(collection(db, "users"), where("email", "==", u.email.toLowerCase()));
+          const qSnap = await getDocs(q);
+          
+          let docRef;
+          if (!qSnap.empty) {
+            docRef = qSnap.docs[0].ref;
+          } else {
+            docRef = doc(db, "users", u.email.toLowerCase());
+          }
+
+          await setDoc(docRef, {
             email: u.email.toLowerCase(),
             role: u.role,
             name: u.name,
