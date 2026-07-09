@@ -1,6 +1,8 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import fs from "fs";
+import path from "path";
 
 let adminApp;
 
@@ -21,6 +23,21 @@ function getFirebaseAdminApp() {
     return adminApp;
   }
 
+  // 1. Intentar cargar desde el archivo JSON de la Service Account local si existe
+  const localServiceAccountPath = path.join(process.cwd(), "club-colombia-futbol-firebase-adminsdk-fbsvc-2aa1a9a36c.json");
+  if (fs.existsSync(localServiceAccountPath)) {
+    try {
+      const serviceAccount = JSON.parse(fs.readFileSync(localServiceAccountPath, "utf8"));
+      adminApp = initializeApp({
+        credential: cert(serviceAccount)
+      });
+      return adminApp;
+    } catch (e) {
+      console.warn("Advertencia: No se pudo cargar el archivo Service Account local:", e.message);
+    }
+  }
+
+  // 2. Fallback a variables de entorno para Vercel
   const projectId = requireServerEnv("FIREBASE_PROJECT_ID");
   const clientEmail = requireServerEnv("FIREBASE_CLIENT_EMAIL");
   const privateKey = requireServerEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n");
@@ -43,3 +60,4 @@ export function getAdminAuth() {
 export function getAdminDb() {
   return getFirestore(getFirebaseAdminApp());
 }
+

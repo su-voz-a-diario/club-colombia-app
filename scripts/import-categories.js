@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 let categoryModel;
 
@@ -34,10 +35,19 @@ function requireEnv(name) {
 }
 
 function initializeFirebaseAdmin() {
-  if (admin.apps.length > 0) return;
+  if (admin.getApps().length > 0) return;
+
+  const localServiceAccountPath = path.join(process.cwd(), "club-colombia-futbol-firebase-adminsdk-fbsvc-2aa1a9a36c.json");
+  if (fs.existsSync(localServiceAccountPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(localServiceAccountPath, "utf8"));
+    admin.initializeApp({
+      credential: admin.cert(serviceAccount)
+    });
+    return;
+  }
 
   admin.initializeApp({
-    credential: admin.credential.cert({
+    credential: admin.cert({
       projectId: requireEnv("FIREBASE_PROJECT_ID"),
       clientEmail: requireEnv("FIREBASE_CLIENT_EMAIL"),
       privateKey: requireEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n")
@@ -155,7 +165,7 @@ async function importCategory(db, rawCategory, index, seenCategoryIds, commit, r
 
   const categoryRef = db.collection("categories").doc(category.categoryId);
   const categorySnap = await categoryRef.get();
-  const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  const timestamp = FieldValue.serverTimestamp();
 
   if (!categorySnap.exists) {
     report.created.push({ row, categoryId: category.categoryId, name: category.name });
@@ -199,7 +209,7 @@ async function main() {
 
   categoryModel = await import("../src/lib/categoryModel.js");
   initializeFirebaseAdmin();
-  const db = admin.firestore();
+  const db = getFirestore();
   const categories = loadCategories(args.file);
   const seenCategoryIds = new Set();
   const report = {

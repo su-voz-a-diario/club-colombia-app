@@ -3,6 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
 
 const REQUIRED_FIELDS = ["name", "parentName", "parentPhone", "category"];
 const VALID_STATUSES = new Set(["active", "suspended", "pending_validation", "on_hold"]);
@@ -39,10 +41,19 @@ function requireEnv(name) {
 }
 
 function initializeFirebaseAdmin() {
-  if (admin.apps.length > 0) return;
+  if (admin.getApps().length > 0) return;
+
+  const localServiceAccountPath = path.join(process.cwd(), "club-colombia-futbol-firebase-adminsdk-fbsvc-2aa1a9a36c.json");
+  if (fs.existsSync(localServiceAccountPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(localServiceAccountPath, "utf8"));
+    admin.initializeApp({
+      credential: admin.cert(serviceAccount)
+    });
+    return;
+  }
 
   admin.initializeApp({
-    credential: admin.credential.cert({
+    credential: admin.cert({
       projectId: requireEnv("FIREBASE_PROJECT_ID"),
       clientEmail: requireEnv("FIREBASE_CLIENT_EMAIL"),
       privateKey: requireEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n")
@@ -173,7 +184,7 @@ async function findParentUid(parentPhone, explicitParentUid) {
   if (explicitParentUid) return explicitParentUid;
 
   try {
-    const userRecord = await admin.auth().getUserByPhoneNumber(parentPhone);
+    const userRecord = await getAuth().getUserByPhoneNumber(parentPhone);
     return userRecord.uid;
   } catch (error) {
     if (error.code === "auth/user-not-found") {
@@ -241,8 +252,8 @@ async function upsertParentUser(db, studentData, commit, report) {
         studentName: studentData.name,
         categoryName: studentData.category,
         status: studentData.status,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       });
     }
     return;
@@ -264,8 +275,8 @@ async function upsertParentUser(db, studentData, commit, report) {
 
   const patch = {
     ...missingPatch,
-    studentIds: admin.firestore.FieldValue.arrayUnion(studentData.studentId),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    studentIds: FieldValue.arrayUnion(studentData.studentId),
+    updatedAt: FieldValue.serverTimestamp()
   };
 
   if (commit) {
@@ -296,8 +307,8 @@ function buildStudentData(rawStudent, studentId, parentUid) {
     status,
     billingStatus,
     healthStatus: rawStudent.healthStatus || DEFAULT_HEALTH_STATUS,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
   };
 }
 
@@ -347,7 +358,7 @@ async function main() {
   }
 
   initializeFirebaseAdmin();
-  const db = admin.firestore();
+  const db = getFirestore();
   const students = loadStudents(args.file);
   const report = {
     mode: args.commit ? "commit" : "dry-run",
