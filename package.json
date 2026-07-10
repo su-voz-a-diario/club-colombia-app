@@ -22,6 +22,11 @@
     "recharts": "^3.8.1",
     "resend": "^6.17.2"
   },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "4.15.9"
+    }
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
