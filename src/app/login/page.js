@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, UserCheck, Users, Dumbbell, ArrowRight, UserPlus, LogIn, Calendar, QrCode, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } f
 export default function Login() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("login"); // 'login' | 'register'
+  const resetRequestInFlightRef = useRef(false);
   
   // Estados de Autenticación
   const [loginUserType, setLoginUserType] = useState("parent");
@@ -195,6 +196,7 @@ export default function Login() {
 
   const handlePasswordResetSubmit = async (e) => {
     e.preventDefault();
+    if (resetRequestInFlightRef.current) return;
     setResetError("");
     setResetSuccessMessage("");
 
@@ -204,6 +206,7 @@ export default function Login() {
       return;
     }
 
+    resetRequestInFlightRef.current = true;
     setIsResetting(true);
     try {
       await sendPasswordResetEmail(auth, email);
@@ -220,6 +223,7 @@ export default function Login() {
       }
     } finally {
       setIsResetting(false);
+      resetRequestInFlightRef.current = false;
     }
   };
 
