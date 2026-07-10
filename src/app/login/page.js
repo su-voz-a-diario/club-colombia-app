@@ -209,18 +209,21 @@ export default function Login() {
     resetRequestInFlightRef.current = true;
     setIsResetting(true);
     try {
-      await sendPasswordResetEmail(auth, email);
-      setResetSuccessMessage("Se ha enviado un correo electrónico de recuperación. Revisa tu bandeja de entrada.");
-      setResetEmail("");
+      const response = await fetch("/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setResetSuccessMessage(data.message);
+        setResetEmail("");
+      } else {
+        setResetError(data.error || "Ocurrió un error al intentar enviar el correo. Por favor intenta de nuevo.");
+      }
     } catch (err) {
       console.error("Error al enviar correo de recuperación:", err);
-      if (err.code === "auth/user-not-found") {
-        setResetError("No existe ninguna cuenta registrada con este correo electrónico.");
-      } else if (err.code === "auth/invalid-email") {
-        setResetError("El formato del correo electrónico es inválido.");
-      } else {
-        setResetError("Ocurrió un error al intentar enviar el correo. Por favor intenta de nuevo.");
-      }
+      setResetError("Ocurrió un error de red al intentar enviar el correo. Por favor intenta de nuevo.");
     } finally {
       setIsResetting(false);
       resetRequestInFlightRef.current = false;
