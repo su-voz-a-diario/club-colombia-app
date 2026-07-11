@@ -9,7 +9,7 @@ export async function getPaymentsHistory(studentId) {
   return data.payments;
 }
 
-export function subscribePayments(parentUid, parentEmail, callback) {
+export function subscribePayments(studentId, parentUid, parentEmail, callback) {
   const data = getActiveDemoData();
   callback(data.payments);
   return () => {};
@@ -17,6 +17,9 @@ export function subscribePayments(parentUid, parentEmail, callback) {
 
 export async function reportPayment(studentId, paymentData) {
   await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  if (!studentId) {
+    throw new Error("studentId es obligatorio para reportar un pago");
+  }
   console.log(`[DEMO MODE] Reporte de pago recibido para estudiante ${studentId}:`, paymentData);
   return { success: true };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
 import { useCoach, useCalendar } from "@/hooks";
@@ -21,6 +21,7 @@ export default function CoachDashboard() {
   const [healthStatus, setHealthStatus] = useState("optimal"); // 'optimal' | 'fatigue' | 'injured'
   const [tacticalNotes, setTacticalNotes] = useState("");
   const [evaluationSaved, setEvaluationSaved] = useState(false);
+  const [evaluationError, setEvaluationError] = useState("");
 
   // Invocar custom hooks para el Demo Mode / Firebase
   const { data: coachStudents, saveAttendance: reportAttendance, saveEvaluation: reportEvaluation } = useCoach();
@@ -28,16 +29,20 @@ export default function CoachDashboard() {
 
   // DECLARACIÓN DE CONSTANTES DERIVADAS DE LOS HOOKS (REEMPLAZANDO USESTATES REDUNDANTES)
   const students = coachStudents || [];
+  const operationalStudents = useMemo(
+    () => students.filter(student => student.status !== "inactive"),
+    [students]
+  );
   const nowStr = new Date().toISOString().split("T")[0];
   const nextEvent = (calendarEvents || [])
     .filter(e => e.date >= nowStr)
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] || null;
 
   useEffect(() => {
-    if (coachStudents && coachStudents.length > 0) {
+    if (coachStudents) {
       // Inicializar estado de asistencia si aún no se ha modificado manualmente
       setAttendance(prev => {
-        return coachStudents.map(s => {
+        return operationalStudents.map(s => {
           const existing = prev.find(a => a.id === s.id);
           return {
             id: s.id,
@@ -49,19 +54,25 @@ export default function CoachDashboard() {
         });
       });
     }
-  }, [coachStudents]);
+  }, [coachStudents, operationalStudents]);
+
+  useEffect(() => {
+    if (selectedStudent && !operationalStudents.some(s => (s.studentId || s.id) === selectedStudent)) {
+      setSelectedStudent("");
+    }
+  }, [selectedStudent, operationalStudents]);
 
   // Pre-cargar estado de salud cuando se selecciona un alumno
   useEffect(() => {
     if (selectedStudent) {
-      const student = students.find(s => (s.studentId || s.id) === selectedStudent);
+      const student = operationalStudents.find(s => (s.studentId || s.id) === selectedStudent);
       if (student && student.healthStatus) {
         setHealthStatus(student.healthStatus);
       } else {
         setHealthStatus("optimal");
       }
     }
-  }, [selectedStudent, students]);
+  }, [selectedStudent, operationalStudents]);
 
   // Manejar el click de asistencia con alertas de salud para lesionados
   const handleAttendanceClick = (athlete, newStatus) => {
@@ -89,8 +100,13 @@ export default function CoachDashboard() {
     if (!selectedStudent) return;
 
     try {
-      const selectedStudentDoc = students.find(s => (s.studentId || s.id) === selectedStudent);
-      if (!selectedStudentDoc) return;
+      setEvaluationError("");
+      const selectedStudentDoc = operationalStudents.find(s => (s.studentId || s.id) === selectedStudent);
+      if (!selectedStudentDoc || selectedStudentDoc.status !== "active") {
+        setSelectedStudent("");
+        setEvaluationError("Este alumno no está disponible para operaciones deportivas.");
+        return;
+      }
       const targetStudentId = selectedStudentDoc.studentId || selectedStudentDoc.id;
       const targetName = selectedStudentDoc.name;
       const metricsObj = { speed, passing, dribbling, shooting, physical, discipline };
@@ -298,6 +314,13 @@ export default function CoachDashboard() {
               </div>
             )}
 
+            {evaluationError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[10px] flex items-center gap-1.5 animate-fade-in">
+                <AlertCircle className="w-4 h-4" />
+                {evaluationError}
+              </div>
+            )}
+
             {/* Selector de alumno */}
             <div>
               <label className="text-[8px] text-slate-400 font-bold block mb-1">ATLETA A EVALUAR</label>
@@ -307,10 +330,10 @@ export default function CoachDashboard() {
                 className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
               >
                 <option value="">-- Seleccionar Atleta --</option>
-                {students.length === 0 && (
+                {operationalStudents.length === 0 && (
                   <option value="" disabled>Aún no hay registros</option>
                 )}
-                {students.map((s) => (
+                {operationalStudents.map((s) => (
                   <option key={s.id} value={s.studentId || s.id}>{s.name}</option>
                 ))}
               </select>

@@ -217,10 +217,14 @@ export default function Login() {
 
   const handlePaymentCompleted = async (amount, paymentLabel) => {
     try {
+      if (!studentId) {
+        throw new Error("No se encontró el identificador del alumno registrado.");
+      }
+
       // 1. Guardar solicitud en pendingPayments en Firestore
       await addDoc(collection(db, "payments"), {
         studentName: studentName,
-        studentId: studentId || "",
+        studentId,
         parentUid: parentUid || "",
         categoryId: categoryNameToId(studentCategory.name),
         categoryName: studentCategory.name,

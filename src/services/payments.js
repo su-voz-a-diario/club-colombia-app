@@ -11,10 +11,10 @@ export const PaymentsService = {
       : FirebasePayments.getPaymentsHistory(studentId);
   },
 
-  subscribePayments: (parentUid, parentEmail, callback) => {
+  subscribePayments: (studentId, parentUid, parentEmail, callback) => {
     return isDemoActive()
-      ? DemoPayments.subscribePayments(parentUid, parentEmail, callback)
-      : FirebasePayments.subscribePayments(parentUid, parentEmail, callback);
+      ? DemoPayments.subscribePayments(studentId, parentUid, parentEmail, callback)
+      : FirebasePayments.subscribePayments(studentId, parentUid, parentEmail, callback);
   },
 
   reportPayment: (studentId, paymentData) => {

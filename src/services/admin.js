@@ -33,6 +33,24 @@ export const AdminService = {
     return isDemoActive() 
       ? DemoAdmin.updateStudentCategory(studentId, category) 
       : FirebaseAdmin.updateStudentCategory(studentId, category);
+  },
+
+  updateStudentLifecycleStatus: (studentId, status, context) => {
+    return isDemoActive()
+      ? DemoAdmin.updateStudentLifecycleStatus(studentId, status, context)
+      : FirebaseAdmin.updateStudentLifecycleStatus(studentId, status, context);
+  },
+
+  getStudentLifecycleHistory: (student) => {
+    return isDemoActive()
+      ? DemoAdmin.getStudentLifecycleHistory(student)
+      : FirebaseAdmin.getStudentLifecycleHistory(student);
+  },
+
+  deleteEmptyStudent: (student) => {
+    return isDemoActive()
+      ? DemoAdmin.deleteEmptyStudent(student)
+      : FirebaseAdmin.deleteEmptyStudent(student);
   }
 };
 export default AdminService;

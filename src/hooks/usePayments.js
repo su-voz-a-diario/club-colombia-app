@@ -30,7 +30,7 @@ export function usePayments(studentId, parentUid, parentEmail) {
   }, [studentId]);
 
   useEffect(() => {
-    if (!parentUid && !parentEmail) {
+    if (!studentId && !parentUid && !parentEmail) {
       setLoading(false);
       return;
     }
@@ -38,7 +38,7 @@ export function usePayments(studentId, parentUid, parentEmail) {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = PaymentsService.subscribePayments(parentUid, parentEmail, (list) => {
+    const unsubscribe = PaymentsService.subscribePayments(studentId, parentUid, parentEmail, (list) => {
       setData(list);
       setLoading(false);
     });
@@ -46,7 +46,7 @@ export function usePayments(studentId, parentUid, parentEmail) {
     return () => {
       unsubscribe();
     };
-  }, [parentUid, parentEmail]);
+  }, [studentId, parentUid, parentEmail]);
 
   const reportPayment = useCallback(async (paymentData) => {
     setError(null);

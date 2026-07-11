@@ -90,6 +90,31 @@ async function linkParentStudents(db, uid, phone) {
     await batch.commit();
   }
 
+  for (const studentId of studentIds) {
+    const paymentsSnap = await db
+      .collection("payments")
+      .where("studentId", "==", studentId)
+      .get();
+
+    const paymentsBatch = db.batch();
+    let paymentWrites = 0;
+
+    paymentsSnap.forEach((paymentDoc) => {
+      const paymentData = paymentDoc.data();
+      if (!paymentData.parentUid && paymentData.studentId === studentId) {
+        paymentsBatch.set(paymentDoc.ref, {
+          parentUid: uid,
+          updatedAt: new Date()
+        }, { merge: true });
+        paymentWrites += 1;
+      }
+    });
+
+    if (paymentWrites > 0) {
+      await paymentsBatch.commit();
+    }
+  }
+
   return studentIds;
 }
 

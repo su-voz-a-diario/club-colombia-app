@@ -7,7 +7,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
-import { useParent, useAttendance, usePayments, useCalendar, useQR } from "@/hooks";
+import { useParent, useAttendance, usePayments, useCalendar, useQR, useParentStudents } from "@/hooks";
 
 
 const parseVideoUrl = (url) => {
@@ -41,6 +41,7 @@ export default function ParentDashboard() {
   const [userEmail, setUserEmail] = useState("");
   const [parentUid, setParentUid] = useState("");
   const [parentPhone, setParentPhone] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
 
   const [chartMetric, setChartMetric] = useState("average"); // 'average' | 'speed' | 'passing' | ...
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -66,7 +67,8 @@ export default function ParentDashboard() {
   const { data: parentData, updateStatus: updateParentStatus } = useParent(parentUid);
   
   const studentIds = parentData?.studentIds || [];
-  const initialStudentId = studentIds[0] || parentData?.studentId || "";
+  const { data: parentStudents } = useParentStudents(studentIds);
+  const initialStudentId = selectedStudentId || studentIds[0] || parentData?.studentId || "";
   const initialStudentName = parentData?.studentName || "";
   
   const { data: studentData, updateStatus: updateStudentStatus } = useQR(initialStudentId, initialStudentName);
@@ -94,6 +96,23 @@ export default function ParentDashboard() {
   const drills = attendanceData?.drills || [];
   const myPayments = paymentsData || [];
   const events = calendarData || [];
+
+  useEffect(() => {
+    if (!parentUid || studentIds.length === 0) return;
+    const storageKey = `parent:selectedStudent:${parentUid}`;
+    const storedStudentId = typeof window !== "undefined" ? window.sessionStorage.getItem(storageKey) : "";
+    const nextStudentId = storedStudentId && studentIds.includes(storedStudentId)
+      ? storedStudentId
+      : studentIds[0];
+    setSelectedStudentId(prev => (prev && studentIds.includes(prev) ? prev : nextStudentId));
+  }, [parentUid, studentIds.join("|")]);
+
+  const handleStudentSelection = (studentId) => {
+    setSelectedStudentId(studentId);
+    if (typeof window !== "undefined" && parentUid) {
+      window.sessionStorage.setItem(`parent:selectedStudent:${parentUid}`, studentId);
+    }
+  };
 
   const getTrendData = () => {
     return evalHistory.map(ev => {
@@ -164,7 +183,7 @@ export default function ParentDashboard() {
   };
 
   const handlePaymentSuccess = async (amount, paymentLabel) => {
-    if ((!parentUid && !userEmail) || !studentName) return;
+    if ((!parentUid && !userEmail) || !studentName || !resolvedStudentId) return;
 
     try {
       // 1. Guardar solicitud en la colección 'payments' mediante el hook usePayments
@@ -238,6 +257,32 @@ export default function ParentDashboard() {
         
         {/* Left Column: QR Card & Payment Simulator if Suspended */}
         <div className="md:col-span-1 flex flex-col items-center gap-6">
+          {!isPendingAssignment && studentIds.length > 1 && (
+            <div className="w-full bg-[#0e121e] border border-slate-900 rounded-2xl p-4 space-y-2 font-sans">
+              <label className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-black block">
+                Deportista
+              </label>
+              <select
+                value={initialStudentId}
+                onChange={(e) => handleStudentSelection(e.target.value)}
+                className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]"
+              >
+                {studentIds.map((id) => {
+                  const optionStudent = parentStudents.find((student) => (student.studentId || student.id) === id);
+                  const optionStatus = optionStudent?.status || "";
+                  return (
+                    <option key={id} value={id}>
+                      {optionStudent?.name || id} {optionStatus ? `- ${optionStatus}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[9px] text-slate-500 leading-relaxed">
+                Cada deportista conserva su propio QR, estado, pagos, calendario y asistencia.
+              </p>
+            </div>
+          )}
+
           <div className="text-center w-full">
             <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black mb-3">Ficha de Cancha</h3>
             {isPendingAssignment ? (
@@ -316,6 +361,15 @@ export default function ParentDashboard() {
               <span className="text-[9px] font-bold text-amber-500 uppercase tracking-wider block">Pago bajo Aclaración</span>
               <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
                 Tu pago fue catalogado En Espera. Revisa los datos reportados o contacta al club.
+              </p>
+            </div>
+          )}
+
+          {!isPendingAssignment && studentStatus === "inactive" && (
+            <div className="bg-slate-500/5 border border-slate-500/15 p-4 rounded-2xl w-full text-center font-sans">
+              <span className="text-[9px] font-bold text-slate-300 uppercase tracking-wider block">Baja Administrativa</span>
+              <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                Este alumno no forma parte de la lista activa del club actualmente.
               </p>
             </div>
           )}
@@ -754,10 +808,10 @@ export default function ParentDashboard() {
 
               <div className="max-w-md space-y-2">
                 <span className="text-[9px] font-mono text-red-500 font-black uppercase tracking-widest block">
-                  {studentStatus === "suspended" ? "Acceso Suspendido por Falta de Pago" : studentStatus === "on_hold" ? "Pago Marcado En Espera" : "Validación de Depósito Requerida"}
+                  {studentStatus === "suspended" ? "Acceso Suspendido por Falta de Pago" : studentStatus === "on_hold" ? "Pago Marcado En Espera" : studentStatus === "inactive" ? "Alumno dado de baja" : "Validación de Depósito Requerida"}
                 </span>
                 <h2 className="font-display font-black text-lg sm:text-xl text-slate-100 uppercase tracking-wide">
-                  {studentStatus === "suspended" ? "Reactiva tu Credencial QR" : studentStatus === "on_hold" ? "Depósito bajo Aclaración" : "Verificando Depósito Bancario"}
+                  {studentStatus === "suspended" ? "Reactiva tu Credencial QR" : studentStatus === "on_hold" ? "Depósito bajo Aclaración" : studentStatus === "inactive" ? "Baja Administrativa" : "Verificando Depósito Bancario"}
                 </h2>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   {studentStatus === "suspended" && (
@@ -769,18 +823,21 @@ export default function ParentDashboard() {
                   {studentStatus === "on_hold" && (
                     "La administración no ha podido identificar tu transferencia o requiere aclaraciones. A continuación puedes volver a subir los detalles o reportar otro depósito."
                   )}
+                  {studentStatus === "inactive" && (
+                    "Este alumno fue dado de baja administrativamente. Su historial permanece almacenado, pero el acceso deportivo está restringido."
+                  )}
                 </p>
               </div>
 
               {/* Simulador integrado dentro del bloqueo si no está validado */}
-              {studentStatus !== "pending_validation" ? (
+              {studentStatus !== "pending_validation" && studentStatus !== "inactive" ? (
                 <div className="w-full max-w-sm pt-2">
                   <PaymentSimulator 
                     amount={300} 
                     onPaymentSuccess={handlePaymentSuccess} 
                   />
                 </div>
-              ) : (
+              ) : studentStatus === "pending_validation" ? (
                 <div className="w-full max-w-sm bg-[#07090e] border border-slate-800 p-5 rounded-2xl space-y-3 text-left">
                   <div className="flex items-center gap-2 text-red-500 font-bold text-xs uppercase tracking-wider">
                     <Clock className="w-4 h-4 animate-spin-slow" />
@@ -788,6 +845,16 @@ export default function ParentDashboard() {
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
                     Tu reporte se envió exitosamente. La administración verificará tu depósito. Puedes mantener abierta esta ventana; el portal se desbloqueará de forma automática.
+                  </p>
+                </div>
+              ) : (
+                <div className="w-full max-w-sm bg-[#07090e] border border-slate-800 p-5 rounded-2xl space-y-3 text-left">
+                  <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase tracking-wider">
+                    <AlertTriangle className="w-4 h-4" />
+                    Estado: Baja Administrativa
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-normal">
+                    Comunícate con la administración del club para revisar la reincorporación del alumno.
                   </p>
                 </div>
               )}

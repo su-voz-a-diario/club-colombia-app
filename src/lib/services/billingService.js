@@ -36,7 +36,7 @@ export const billingService = {
 
   /**
    * Procesa el Webhook de Mercado Pago recibido en tiempo real.
-   * Modifica el estado del pago a 'paid' y reactiva al estudiante en la misma transacción lógica.
+   * Modifica el estado del pago a 'paid' y reactiva al estudiante si no está dado de baja.
    */
   async processPaymentWebhook(payload) {
     const { paymentId, preferenceId, status } = payload;
@@ -69,13 +69,23 @@ export const billingService = {
 
     if (updatePaymentError) throw updatePaymentError;
 
-    // 3. Reactivar la credencial QR del alumno
-    const { error: updateStudentError } = await supabase
+    const { data: student, error: fetchStudentError } = await supabase
       .from("students")
-      .update({ status: "active" })
-      .eq("id", payment.student_id);
+      .select("status")
+      .eq("id", payment.student_id)
+      .single();
 
-    if (updateStudentError) throw updateStudentError;
+    if (fetchStudentError) throw fetchStudentError;
+
+    // 3. Reactivar la credencial QR del alumno solo si no tiene baja administrativa
+    if (student?.status !== "inactive") {
+      const { error: updateStudentError } = await supabase
+        .from("students")
+        .update({ status: "active" })
+        .eq("id", payment.student_id);
+
+      if (updateStudentError) throw updateStudentError;
+    }
 
     // 4. Mapear simulación de notificaciones de confirmación
     console.log(`[Twilio / WhatsApp] Notificación enviada: El pago del estudiante fue procesado. Credencial QR activada.`);

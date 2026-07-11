@@ -7,7 +7,7 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 
 const REQUIRED_FIELDS = ["name", "parentName", "parentPhone", "category"];
-const VALID_STATUSES = new Set(["active", "suspended", "pending_validation", "on_hold"]);
+const VALID_STATUSES = new Set(["active", "inactive", "suspended", "pending_validation", "on_hold"]);
 const VALID_BILLING_STATUSES = new Set(["paid", "pending_payment", "pending_validation", "on_hold"]);
 const DEFAULT_STATUS = "suspended";
 const DEFAULT_BILLING_STATUS = "pending_payment";

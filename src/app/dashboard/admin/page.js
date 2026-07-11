@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video, Pencil, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
+import { AdminService } from "@/services/admin";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
 import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
@@ -17,6 +18,38 @@ export default function AdminDashboard() {
     }).format(val);
   };
 
+  const lifecycleActions = {
+    reactivate: {
+      label: "Reactivar Alumno",
+      status: "active",
+      tone: "emerald",
+      description: "El alumno volverá a estar activo sin modificar historial, pagos, asistencias, evaluaciones, padre ni categoría."
+    },
+    suspend: {
+      label: "Suspender Alumno",
+      status: "suspended",
+      tone: "amber",
+      description: "El acceso del alumno será restringido por una razón administrativa. Toda la información histórica se conserva."
+    },
+    inactive: {
+      label: "Dar de Baja",
+      status: "inactive",
+      tone: "slate",
+      description: "El alumno dejará de formar parte de los alumnos activos, pero toda su información permanecerá almacenada."
+    },
+    delete: {
+      label: "Eliminar Definitivamente",
+      status: "",
+      tone: "red",
+      description: "Acción reservada para registros duplicados, pruebas o errores de captura. El borrado físico está bloqueado por seguridad."
+    }
+  };
+
+  const lifecycleReasonOptions = {
+    suspend: ["Adeudo administrativo", "Disciplina", "Documentación pendiente", "Solicitud del acudiente", "Otro"],
+    inactive: ["Retiro temporal", "Cambio de club", "Cambio de ciudad", "Pausa familiar", "Otro"]
+  };
+
   // Datos de Firestore en estado
   const [students, setStudents] = useState([]);
   const [activeTab, setActiveTab] = useState("students"); // 'students' | 'billing' | 'schedules' | 'notifications'
@@ -25,6 +58,15 @@ export default function AdminDashboard() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [newCategory, setNewCategory] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
+  const [managedStudent, setManagedStudent] = useState(null);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null);
+  const [lifecycleDeleteText, setLifecycleDeleteText] = useState("");
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleOtherReason, setLifecycleOtherReason] = useState("");
+  const [lifecycleHistory, setLifecycleHistory] = useState(null);
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [lifecycleMessage, setLifecycleMessage] = useState("");
+  const [lifecycleError, setLifecycleError] = useState("");
 
   // Estado para envío de notificación
   const [notificationText, setNotificationText] = useState("");
@@ -41,6 +83,20 @@ export default function AdminDashboard() {
 
   // Cargar estudiantes y lista de validaciones de pago de Firestore
   const [pendingPayments, setPendingPayments] = useState([]);
+  const [approvingPaymentId, setApprovingPaymentId] = useState("");
+  const approvingPaymentRef = useRef(false);
+  const [paymentActionError, setPaymentActionError] = useState("");
+  const [paymentActionSuccess, setPaymentActionSuccess] = useState("");
+
+  // Herramienta segura para vincular padres con alumnos concretos
+  const [parentLinkIdentifierType, setParentLinkIdentifierType] = useState("phone");
+  const [parentLinkIdentifier, setParentLinkIdentifier] = useState("");
+  const [parentLinkLoading, setParentLinkLoading] = useState(false);
+  const [parentLinkSaving, setParentLinkSaving] = useState(false);
+  const [parentLinkResult, setParentLinkResult] = useState(null);
+  const [parentLinkSelectedIds, setParentLinkSelectedIds] = useState([]);
+  const [parentLinkMessage, setParentLinkMessage] = useState("");
+  const [parentLinkError, setParentLinkError] = useState("");
 
   // Event form states
   const [eventTitle, setEventTitle] = useState("");
@@ -271,8 +327,178 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleParentLinkSearch = async (e) => {
+    e.preventDefault();
+    setParentLinkLoading(true);
+    setParentLinkError("");
+    setParentLinkMessage("");
+    setParentLinkResult(null);
+    setParentLinkSelectedIds([]);
+
+    try {
+      const response = await fetch("/api/admin/link-parent-diagnostics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifierType: parentLinkIdentifierType,
+          identifier: parentLinkIdentifier
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "No fue posible diagnosticar la cuenta padre.");
+      }
+      setParentLinkResult(data);
+    } catch (err) {
+      setParentLinkError(err.message);
+    } finally {
+      setParentLinkLoading(false);
+    }
+  };
+
+  const toggleParentLinkStudent = (studentId) => {
+    setParentLinkSelectedIds(prev => (
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    ));
+  };
+
+  const handleParentLinkSubmit = async () => {
+    if (!parentLinkResult?.parent?.uid || parentLinkSelectedIds.length === 0) return;
+    const selectedStudents = parentLinkResult.students.filter(student => parentLinkSelectedIds.includes(student.studentId));
+    const relatedPaymentCount = parentLinkResult.payments.filter(payment => (
+      parentLinkSelectedIds.includes(payment.studentId) && !payment.parentUid
+    )).length;
+    const confirmed = window.confirm(
+      [
+        "Confirma la vinculación administrativa:",
+        "",
+        `Cuenta padre: ${parentLinkResult.parent.uid}`,
+        `Alumnos seleccionados: ${selectedStudents.map(student => `${student.name || "Sin nombre"} (${student.studentId})`).join(", ")}`,
+        "",
+        "Se escribirá:",
+        "- users/{parentUid}: role=parent, status=active, studentIds, updatedAt",
+        "- students/{studentId}: parentUid, updatedAt",
+        `- payments relacionados sin parentUid: parentUid, updatedAt (${relatedPaymentCount})`,
+        "",
+        "No se cambiará el status de alumnos ni pagos."
+      ].join("\n")
+    );
+    if (!confirmed) return;
+
+    setParentLinkSaving(true);
+    setParentLinkError("");
+    setParentLinkMessage("");
+
+    try {
+      const response = await fetch("/api/admin/link-parent-students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentUid: parentLinkResult.parent.uid,
+          studentIds: parentLinkSelectedIds
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "No fue posible vincular la cuenta padre.");
+      }
+      setParentLinkMessage(`Vinculación exitosa. Alumnos vinculados: ${data.linkedStudentIds.length}. Pagos históricos actualizados: ${data.updatedPayments}.`);
+      setParentLinkSelectedIds([]);
+    } catch (err) {
+      setParentLinkError(err.message);
+    } finally {
+      setParentLinkSaving(false);
+    }
+  };
+
+  const openLifecycleModal = (student) => {
+    setManagedStudent(student);
+    setPendingLifecycleAction(null);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleHistory(null);
+    setLifecycleMessage("");
+    setLifecycleError("");
+  };
+
+  const closeLifecycleModal = () => {
+    setManagedStudent(null);
+    setPendingLifecycleAction(null);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleHistory(null);
+    setLifecycleMessage("");
+    setLifecycleError("");
+  };
+
+  const prepareLifecycleAction = async (actionKey) => {
+    setPendingLifecycleAction(actionKey);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleMessage("");
+    setLifecycleError("");
+    setLifecycleHistory(null);
+
+    if (actionKey === "delete" && managedStudent) {
+      setLifecycleLoading(true);
+      try {
+        const history = await AdminService.getStudentLifecycleHistory(managedStudent);
+        setLifecycleHistory(history);
+      } catch (err) {
+        setLifecycleError(err.message || "No fue posible revisar el historial del alumno.");
+      } finally {
+        setLifecycleLoading(false);
+      }
+    }
+  };
+
+  const executeLifecycleStatusAction = async () => {
+    if (!managedStudent || !pendingLifecycleAction) return;
+    const action = lifecycleActions[pendingLifecycleAction];
+    if (!action?.status) return;
+
+    setLifecycleLoading(true);
+    setLifecycleError("");
+    setLifecycleMessage("");
+
+    try {
+      const reasonDetail = lifecycleReason === "Otro" ? lifecycleOtherReason.trim() : "";
+      await AdminService.updateStudentLifecycleStatus(managedStudent.studentId || managedStudent.id, action.status, {
+        reason: lifecycleReason,
+        reasonDetail
+      });
+      setLifecycleMessage(`${action.label} aplicado correctamente. No se modificó historial ni relaciones.`);
+    } catch (err) {
+      setLifecycleError(err.message || "No fue posible actualizar el estado del alumno.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  };
+
+  const executeProtectedDelete = async () => {
+    if (!managedStudent || lifecycleDeleteText !== "ELIMINAR") return;
+    setLifecycleLoading(true);
+    setLifecycleError("");
+    setLifecycleMessage("");
+
+    try {
+      const result = await AdminService.deleteEmptyStudent(managedStudent);
+      setLifecycleHistory(result.history || null);
+      setLifecycleError("El borrado físico está bloqueado por seguridad. Utilice la opción Dar de Baja.");
+    } catch (err) {
+      setLifecycleError(err.message || "No fue posible validar la eliminación del alumno.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  };
+
   const getLeaderboard = () => {
-    return students.map(student => {
+    return students.filter(student => student.status === "active").map(student => {
       // 1. Average rating
       const studentEvals = evaluations.filter(ev => ev.studentName === student.name);
       let avgScore = null;
@@ -447,18 +673,23 @@ export default function AdminDashboard() {
       }
 
       const studentData = studentSnap.data();
-      
-      // Actualizar en Firestore a 'active'
-      await updateDoc(studentDocRef, {
-        status: "active",
+
+      const isInactiveStudent = studentData.status === "inactive";
+      const studentPatch = {
         billingStatus: "paid",
         dueDays: 0,
         updatedAt: serverTimestamp()
-      });
+      };
 
-      if (studentData.parentUid) {
+      if (!isInactiveStudent) {
+        studentPatch.status = "active";
+      }
+
+      await updateDoc(studentDocRef, studentPatch);
+
+      if (studentData.parentUid && !isInactiveStudent) {
         await updateDoc(doc(db, "users", studentData.parentUid), { status: "active" });
-      } else if (studentData.parentEmail) {
+      } else if (studentData.parentEmail && !isInactiveStudent) {
         // Legacy compatibility
         // TODO: eliminar cuando toda la base de datos tenga parentUid
         const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
@@ -473,36 +704,33 @@ export default function AdminDashboard() {
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
-  const approvePendingPayment = async (paymentId, studentIdOrNameFromPayment) => {
+  const approvePendingPayment = async (paymentId) => {
+    if (approvingPaymentRef.current) return;
+
+    approvingPaymentRef.current = true;
+    setApprovingPaymentId(paymentId);
+    setPaymentActionError("");
+    setPaymentActionSuccess("");
+
     try {
-      // 1. Marcar el pago como aprobado en Firestore
-      const paymentRef = doc(db, "payments", paymentId);
-      await updateDoc(paymentRef, { status: "approved", updatedAt: serverTimestamp() });
+      const response = await fetch("/api/admin/approve-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId })
+      });
 
-      // 2. Reactivar al alumno en la colección 'students' de Firestore
-      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrNameFromPayment);
-      
-      if (studentSnap.exists()) {
-        const studentData = studentSnap.data();
-        await updateDoc(studentDocRef, {
-          status: "active",
-          billingStatus: "paid",
-          dueDays: 0,
-          updatedAt: serverTimestamp()
-        });
-
-        if (studentData.parentUid) {
-          await updateDoc(doc(db, "users", studentData.parentUid), { status: "active" });
-        } else if (studentData.parentEmail) {
-          // Legacy compatibility
-          // TODO: eliminar cuando toda la base de datos tenga parentUid
-          const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
-          await updateDoc(parentRef, { status: "active" });
-        }
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "No fue posible aprobar el pago porque no se pudo identificar de forma segura al alumno asociado. Revisa los datos del pago.");
       }
 
+      setPaymentActionSuccess("Pago aprobado correctamente. Se actualizó la facturación del alumno asociado.");
     } catch (err) {
       console.error("Error al aprobar pago:", err);
+      setPaymentActionError(err.message || "No fue posible aprobar el pago porque no se pudo identificar de forma segura al alumno asociado. Revisa los datos del pago.");
+    } finally {
+      approvingPaymentRef.current = false;
+      setApprovingPaymentId("");
     }
   };
 
@@ -707,11 +935,16 @@ export default function AdminDashboard() {
             <div className="space-y-3">
               {/* Stat 1 */}
               <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl">
-                <span className="text-[9px] text-slate-400 font-bold uppercase block">Alumnos Activos</span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase block">Plantilla Activa</span>
                 <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
                   <Users className="w-4 h-4 text-[#10b981]" />
-                  {students.length > 0 ? `${students.filter(s => s.status === "active").length} / ${students.length}` : "Sin información"}
+                  {students.length > 0 ? students.filter(s => s.status === "active").length : "Sin información"}
                 </span>
+                {students.length > 0 && (
+                  <span className="text-[9px] text-slate-500 font-mono mt-1 block">
+                    Histórico: {students.length} alumnos
+                  </span>
+                )}
               </div>
 
               {/* Stat 2 */}
@@ -728,10 +961,15 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Tasa de Morosidad</span>
                 <span className="text-xl font-display font-black text-amber-500 flex items-center gap-1.5 mt-0.5 animate-pulse">
                   <AlertTriangle className="w-4 h-4" />
-                  {students.length > 0
-                    ? `${((students.filter(s => s.status === "suspended").length / students.length) * 100).toFixed(0)}%`
+                  {students.filter(s => s.status === "active").length > 0
+                    ? `${((students.filter(s => s.status === "active" && Number(s.dueDays || 0) > 5).length / students.filter(s => s.status === "active").length) * 100).toFixed(0)}%`
                     : "Sin información"}
                 </span>
+                {students.length > 0 && (
+                  <span className="text-[9px] text-slate-500 font-mono mt-1 block">
+                    Base: plantilla activa
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -753,6 +991,14 @@ export default function AdminDashboard() {
               }`}
             >
               Mora y Validaciones
+            </button>
+            <button
+              onClick={() => setActiveTab("parent-link")}
+              className={`text-left px-4 py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer ${
+                activeTab === "parent-link" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
+              }`}
+            >
+              Vincular Padre
             </button>
             <button
               onClick={() => setActiveTab("schedules")}
@@ -973,14 +1219,20 @@ export default function AdminDashboard() {
                           >
                             Excepción
                           </button>
-                          <button
-                            onClick={() => handleOpenPhoneModal(student)}
-                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer min-w-[80px] text-center"
-                            title="Editar teléfono del acudiente"
-                          >
-                            Teléfono
-                          </button>
-                        </div>
+	                          <button
+	                            onClick={() => handleOpenPhoneModal(student)}
+	                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer min-w-[80px] text-center"
+	                            title="Editar teléfono del acudiente"
+	                          >
+	                            Teléfono
+	                          </button>
+	                          <button
+	                            onClick={() => openLifecycleModal(student)}
+	                            className="bg-slate-900 border border-slate-800 text-sky-400 hover:text-sky-300 text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer min-w-[80px] text-center"
+	                          >
+	                            Administrar
+	                          </button>
+	                        </div>
                       </div>
                     </div>
                   ))
@@ -1031,22 +1283,222 @@ export default function AdminDashboard() {
                           >
                             Excepción
                           </button>
-                          <button
-                            onClick={() => handleOpenPhoneModal(student)}
-                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
-                            title="Editar teléfono del acudiente"
-                          >
-                            Teléfono
-                          </button>
-                        </td>
+	                          <button
+	                            onClick={() => handleOpenPhoneModal(student)}
+	                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+	                            title="Editar teléfono del acudiente"
+	                          >
+	                            Teléfono
+	                          </button>
+	                          <button
+	                            onClick={() => openLifecycleModal(student)}
+	                            className="bg-slate-900 border border-slate-800 text-sky-400 hover:text-sky-300 text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+	                          >
+	                            Administrar
+	                          </button>
+	                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+	              </div>
 
-              {/* MODAL / FORM DE OVERRIDE MANUAL */}
-              {selectedStudent && (
+	              {managedStudent && (
+	                <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+	                  <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-[#0e121e]/95 border border-slate-800 rounded-3xl shadow-2xl animate-fade-in">
+	                    <div className="p-5 sm:p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+	                      <div>
+	                        <span className="text-[9px] font-mono text-sky-400 font-black uppercase tracking-widest block">Ciclo de vida del alumno</span>
+	                        <h3 className="font-display font-black text-lg text-slate-100 uppercase tracking-wide mt-1">{managedStudent.name}</h3>
+	                        <p className="text-[10px] text-slate-500 mt-0.5">
+	                          Estado actual: <span className="text-slate-300 font-bold">{managedStudent.status || "Sin estado"}</span>
+	                        </p>
+	                      </div>
+	                      <button
+	                        onClick={closeLifecycleModal}
+	                        className="self-start sm:self-center bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+	                      >
+	                        Cerrar
+	                      </button>
+	                    </div>
+
+	                    <div className="p-5 sm:p-6 space-y-5">
+	                      {lifecycleMessage && (
+	                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+	                          <CheckCircle className="w-4 h-4 shrink-0" />
+	                          <span>{lifecycleMessage}</span>
+	                        </div>
+	                      )}
+
+	                      {lifecycleError && (
+	                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+	                          <AlertTriangle className="w-4 h-4 shrink-0" />
+	                          <span>{lifecycleError}</span>
+	                        </div>
+	                      )}
+
+	                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                        {Object.entries(lifecycleActions).map(([key, action]) => {
+	                          const toneClasses = {
+	                            emerald: "border-emerald-500/25 bg-emerald-500/5 text-emerald-400 hover:border-emerald-500/50",
+	                            amber: "border-amber-500/25 bg-amber-500/5 text-amber-500 hover:border-amber-500/50",
+	                            slate: "border-slate-700 bg-slate-900/50 text-slate-300 hover:border-slate-500",
+	                            red: "border-red-500/25 bg-red-500/5 text-red-400 hover:border-red-500/50"
+	                          };
+	                          return (
+	                            <button
+	                              key={key}
+	                              type="button"
+	                              onClick={() => prepareLifecycleAction(key)}
+	                              className={`text-left border rounded-2xl p-4 transition-all cursor-pointer ${toneClasses[action.tone]} ${
+	                                pendingLifecycleAction === key ? "ring-1 ring-current" : ""
+	                              }`}
+	                            >
+	                              <span className="font-display font-black text-xs uppercase tracking-wider block">{action.label}</span>
+	                              <span className="text-[10px] text-slate-400 leading-relaxed block mt-2">{action.description}</span>
+	                            </button>
+	                          );
+	                        })}
+	                      </div>
+
+	                      {pendingLifecycleAction && pendingLifecycleAction !== "delete" && (
+	                        <div className="bg-[#07090e]/70 border border-slate-800 rounded-2xl p-4 space-y-4">
+	                          <div>
+	                            <h4 className="font-display font-black text-xs uppercase tracking-wider text-slate-200">
+	                              Confirmar: {lifecycleActions[pendingLifecycleAction].label}
+	                            </h4>
+	                            <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+	                              Esta acción solo actualizará <span className="text-slate-300 font-mono">students.status</span> y conservará historial, pagos, asistencias, evaluaciones, padre y categoría.
+	                            </p>
+	                          </div>
+
+	                          {(pendingLifecycleAction === "suspend" || pendingLifecycleAction === "inactive") && (
+	                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                              <div>
+	                                <label className="text-[9px] text-slate-500 font-black uppercase tracking-wider block mb-1">Motivo opcional</label>
+	                                <select
+	                                  value={lifecycleReason}
+	                                  onChange={(e) => setLifecycleReason(e.target.value)}
+	                                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+	                                >
+	                                  <option value="">Sin motivo especificado</option>
+	                                  {lifecycleReasonOptions[pendingLifecycleAction].map((reason) => (
+	                                    <option key={reason} value={reason}>{reason}</option>
+	                                  ))}
+	                                </select>
+	                              </div>
+	                              {lifecycleReason === "Otro" && (
+	                                <div>
+	                                  <label className="text-[9px] text-slate-500 font-black uppercase tracking-wider block mb-1">Detalle opcional</label>
+	                                  <input
+	                                    value={lifecycleOtherReason}
+	                                    onChange={(e) => setLifecycleOtherReason(e.target.value)}
+	                                    placeholder="Describe el motivo"
+	                                    className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+	                                  />
+	                                </div>
+	                              )}
+	                            </div>
+	                          )}
+
+	                          {pendingLifecycleAction === "suspend" && (
+	                            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-3 rounded-xl text-[10px] leading-relaxed">
+	                              Advertencia: el acceso del alumno al Portal Padre será restringido.
+	                            </div>
+	                          )}
+
+	                          {pendingLifecycleAction === "inactive" && (
+	                            <div className="bg-slate-900 border border-slate-700 text-slate-300 p-3 rounded-xl text-[10px] leading-relaxed">
+	                              El alumno dejará de formar parte de los alumnos activos, pero toda su información permanecerá almacenada.
+	                            </div>
+	                          )}
+
+	                          <div className="flex justify-end gap-2">
+	                            <button
+	                              type="button"
+	                              onClick={() => setPendingLifecycleAction(null)}
+	                              className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+	                            >
+	                              Cancelar
+	                            </button>
+	                            <button
+	                              type="button"
+	                              onClick={executeLifecycleStatusAction}
+	                              disabled={lifecycleLoading}
+	                              className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider"
+	                            >
+	                              {lifecycleLoading ? "Aplicando..." : "Confirmar"}
+	                            </button>
+	                          </div>
+	                        </div>
+	                      )}
+
+	                      {pendingLifecycleAction === "delete" && (
+	                        <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 space-y-4">
+	                          <div>
+	                            <h4 className="font-display font-black text-xs uppercase tracking-wider text-red-400">Eliminar Definitivamente</h4>
+	                            <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+	                              Esta acción es irreversible, puede afectar información histórica y no podrá recuperarse posteriormente. Por seguridad, el borrado físico está bloqueado temporalmente.
+	                            </p>
+	                          </div>
+
+	                          {lifecycleHistory && (
+	                            <div className="grid grid-cols-3 gap-2 text-center">
+	                              <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3">
+	                                <span className="text-lg font-black text-slate-200 block">{lifecycleHistory.payments}</span>
+	                                <span className="text-[8px] text-slate-500 uppercase font-bold">Pagos</span>
+	                              </div>
+	                              <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3">
+	                                <span className="text-lg font-black text-slate-200 block">{lifecycleHistory.attendance}</span>
+	                                <span className="text-[8px] text-slate-500 uppercase font-bold">Asistencias</span>
+	                              </div>
+	                              <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3">
+	                                <span className="text-lg font-black text-slate-200 block">{lifecycleHistory.evaluations}</span>
+	                                <span className="text-[8px] text-slate-500 uppercase font-bold">Evaluaciones</span>
+	                              </div>
+	                            </div>
+	                          )}
+
+	                          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[10px] leading-relaxed">
+	                            Este alumno tiene historial o puede tener relaciones administrativas. Por seguridad no puede eliminarse definitivamente. Utilice la opción Dar de Baja.
+	                          </div>
+
+	                          <div>
+	                            <label className="text-[9px] text-slate-500 font-black uppercase tracking-wider block mb-1">Escribe ELIMINAR para continuar</label>
+	                            <input
+	                              value={lifecycleDeleteText}
+	                              onChange={(e) => setLifecycleDeleteText(e.target.value)}
+	                              className="w-full bg-[#07090e] border border-red-500/20 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-red-500 font-mono"
+	                              placeholder="ELIMINAR"
+	                            />
+	                          </div>
+
+	                          <div className="flex justify-end gap-2">
+	                            <button
+	                              type="button"
+	                              onClick={() => setPendingLifecycleAction(null)}
+	                              className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+	                            >
+	                              Cancelar
+	                            </button>
+	                            <button
+	                              type="button"
+	                              onClick={executeProtectedDelete}
+	                              disabled={lifecycleLoading || lifecycleDeleteText !== "ELIMINAR"}
+	                              className="bg-red-500 hover:bg-red-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider"
+	                            >
+	                              {lifecycleLoading ? "Validando..." : "Validar eliminación"}
+	                            </button>
+	                          </div>
+	                        </div>
+	                      )}
+	                    </div>
+	                  </div>
+	                </div>
+	              )}
+
+	              {/* MODAL / FORM DE OVERRIDE MANUAL */}
+	              {selectedStudent && (
                 <div className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in mt-6 space-y-4">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5 text-amber-500">
@@ -1199,7 +1651,145 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 2: MORA Y RECONCILIACIÓN MP */}
+          {/* TAB 2: VINCULACIÓN SEGURA DE PADRES */}
+          {activeTab === "parent-link" && (
+            <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5 font-sans">
+              <div>
+                <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Vincular Cuenta Padre</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Diagnóstico y vinculación explícita de una cuenta Auth con alumnos concretos.</p>
+              </div>
+
+              <form onSubmit={handleParentLinkSearch} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-[150px_1fr_auto] gap-3">
+                <select
+                  value={parentLinkIdentifierType}
+                  onChange={(e) => setParentLinkIdentifierType(e.target.value)}
+                  className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+                >
+                  <option value="phone">Teléfono</option>
+                  <option value="uid">UID</option>
+                  <option value="email">Correo</option>
+                </select>
+                <input
+                  value={parentLinkIdentifier}
+                  onChange={(e) => setParentLinkIdentifier(e.target.value)}
+                  placeholder="Identificador de la cuenta padre"
+                  className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+                />
+                <button
+                  type="submit"
+                  disabled={parentLinkLoading || !parentLinkIdentifier.trim()}
+                  className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {parentLinkLoading ? "Buscando..." : "Diagnosticar"}
+                </button>
+              </form>
+
+              {parentLinkError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{parentLinkError}</span>
+                </div>
+              )}
+
+              {parentLinkMessage && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{parentLinkMessage}</span>
+                </div>
+              )}
+
+              {parentLinkResult && (
+                <div className="space-y-4">
+                  <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-2">
+                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Usuario localizado</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-slate-400">
+                      <span className="min-w-0">UID: <b className="text-slate-200 font-mono break-all">{parentLinkResult.parent.uid}</b></span>
+                      <span>Auth: <b className="text-slate-200">{parentLinkResult.parent.authExists ? "Existe" : "No existe"}</b></span>
+                      <span className="min-w-0">Teléfono: <b className="text-slate-200 font-mono break-all">{parentLinkResult.parent.phone || "Sin registro"}</b></span>
+                      <span className="min-w-0">Correo: <b className="text-slate-200 break-all">{parentLinkResult.parent.email || "Sin registro"}</b></span>
+                      <span>Estado: <b className="text-slate-200">{parentLinkResult.parent.status || "Sin users/{uid}"}</b></span>
+                      <span>Alumno(s) actuales: <b className="text-slate-200">{parentLinkResult.parent.studentIds?.length || 0}</b></span>
+                    </div>
+                  </div>
+
+                  {parentLinkResult.warnings?.length > 0 && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-3.5 rounded-xl text-xs space-y-1">
+                      {parentLinkResult.warnings.map((warning) => (
+                        <div key={warning} className="flex items-center gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>{warning}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Alumnos candidatos</h3>
+                    {parentLinkResult.students.length === 0 ? (
+                      <div className="text-xs text-slate-500">No hay alumnos candidatos.</div>
+                    ) : parentLinkResult.students.map((student) => (
+                      <label key={student.studentId} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-xl border ${
+                        student.conflict ? "border-red-500/30 bg-red-500/5" : "border-slate-800 bg-[#0e121e]/70"
+                      }`}>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={parentLinkSelectedIds.includes(student.studentId)}
+                              onChange={() => toggleParentLinkStudent(student.studentId)}
+                              disabled={!student.canLink}
+                              className="accent-[#10b981]"
+                            />
+                            <span className="text-xs font-bold text-slate-200">{student.name || student.studentId}</span>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                              student.status === "active" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-500"
+                            }`}>
+                              {student.status || "sin status"}
+                            </span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 font-mono break-all">ID: {student.studentId}</div>
+                        </div>
+                        <div className="text-[9px] text-slate-500 md:text-right">
+                          <div>billingStatus: <b className="text-slate-300">{student.billingStatus || "sin dato"}</b></div>
+                          <div className="break-all">parentUid: <b className={student.conflict ? "text-red-400" : "text-slate-300"}>{student.parentUid || "vacío"}</b></div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Pagos relacionados</h3>
+                    {parentLinkResult.payments.length === 0 ? (
+                      <div className="text-xs text-slate-500">No hay pagos relacionados.</div>
+                    ) : parentLinkResult.payments.map((payment) => (
+                      <div key={payment.paymentId} className="grid grid-cols-1 md:grid-cols-4 gap-2 text-[10px] text-slate-400 border border-slate-850 rounded-xl p-3 min-w-0">
+                        <span className="font-mono text-slate-300 break-all">{payment.paymentId}</span>
+                        <span className="break-all">studentId: {payment.studentId || "vacío"}</span>
+                        <span>status: {payment.status || "vacío"}</span>
+                        <span className="break-all">parentUid: {payment.parentUid || "vacío"}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      La vinculación no cambia estados de alumnos ni pagos. Solo conecta la cuenta padre con los alumnos seleccionados y completa parentUid en pagos históricos exactos.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleParentLinkSubmit}
+                      disabled={parentLinkSaving || parentLinkSelectedIds.length === 0}
+                      className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {parentLinkSaving ? "Vinculando..." : `Vincular (${parentLinkSelectedIds.length})`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: MORA Y RECONCILIACIÓN MP */}
           {activeTab === "billing" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4 font-sans">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1234,6 +1824,20 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {paymentActionError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{paymentActionError}</span>
+                </div>
+              )}
+
+              {paymentActionSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{paymentActionSuccess}</span>
+                </div>
+              )}
+
               {/* Solicitudes de Validación de Pago Recibidas */}
               {pendingPayments.length > 0 && (
                 <div className="bg-amber-500/5 border border-amber-500/15 p-4 rounded-2xl space-y-3 animate-pulse-subtle">
@@ -1258,10 +1862,11 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button
-                            onClick={() => approvePendingPayment(payment.id, payment.studentId || payment.studentName)}
-                            className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                            onClick={() => approvePendingPayment(payment.id)}
+                            disabled={approvingPaymentId === payment.id}
+                            className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed font-sans"
                           >
-                            OK (Aprobar)
+                            {approvingPaymentId === payment.id ? "Aprobando..." : "OK (Aprobar)"}
                           </button>
                           <button
                             onClick={() => holdPendingPayment(payment.id, payment.studentId || payment.studentName)}
@@ -1287,22 +1892,26 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-200 text-xs">{student.name}</span>
                         <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                          student.status === "active"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : student.status === "pending_validation"
-                              ? "bg-red-500/10 text-red-500 animate-pulse"
-                              : student.status === "on_hold"
-                                ? "bg-amber-500/10 text-amber-500"
-                                : "bg-red-500/10 text-red-400 animate-pulse"
-                        }`}>
-                          {student.status === "active" 
-                            ? "Activo (Al día)" 
-                            : student.status === "pending_validation"
-                              ? "DEPOSITADO" 
-                              : student.status === "on_hold"
-                                ? "EN ESPERA"
-                                : "QR Suspendido"
-                          }
+	                          student.status === "active"
+	                            ? "bg-emerald-500/10 text-emerald-400"
+	                            : student.status === "pending_validation"
+	                              ? "bg-red-500/10 text-red-500 animate-pulse"
+	                              : student.status === "on_hold"
+	                                ? "bg-amber-500/10 text-amber-500"
+	                                : student.status === "inactive"
+	                                  ? "bg-slate-500/10 text-slate-300"
+	                                  : "bg-red-500/10 text-red-400 animate-pulse"
+	                        }`}>
+	                          {student.status === "active" 
+	                            ? "Activo (Al día)" 
+	                            : student.status === "pending_validation"
+	                              ? "DEPOSITADO" 
+	                              : student.status === "on_hold"
+	                                ? "EN ESPERA"
+	                                : student.status === "inactive"
+	                                  ? "BAJA"
+	                                  : "QR Suspendido"
+	                          }
                         </span>
                       </div>
                       
@@ -1326,16 +1935,17 @@ export default function AdminDashboard() {
                         <>
                           <button
                             onClick={() => {
-                              const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name) || pendingPayments[0];
+                              const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name);
                               if (firstPending) {
-                                approvePendingPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
+                                approvePendingPayment(firstPending.id);
                               } else {
                                 confirmManualPayment(student.id);
                               }
                             }}
-                            className="bg-emerald-500 text-slate-950 hover:bg-emerald-600 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                            disabled={Boolean(approvingPaymentId)}
+                            className="bg-emerald-500 text-slate-950 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed font-sans"
                           >
-                            OK (Aprobar)
+                            {approvingPaymentId ? "Aprobando..." : "OK (Aprobar)"}
                           </button>
                           <button
                             onClick={() => {

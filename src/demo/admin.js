@@ -71,3 +71,31 @@ export async function updateStudentCategory(studentId, category) {
   console.log(`[DEMO MODE] Categoría del estudiante ${studentId} actualizada a: ${category}`);
   return { success: true };
 }
+
+export async function updateStudentLifecycleStatus(studentId, status, context = {}) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Estado del estudiante ${studentId} actualizado a: ${status}`, context);
+  return { success: true };
+}
+
+export async function getStudentLifecycleHistory(student) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  const hasHistory = student?.status === "active";
+  return {
+    payments: hasHistory ? 2 : 0,
+    attendance: hasHistory ? 1 : 0,
+    evaluations: hasHistory ? 1 : 0,
+    total: hasHistory ? 4 : 0
+  };
+}
+
+export async function deleteEmptyStudent(student) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  const history = await getStudentLifecycleHistory(student);
+  return {
+    success: false,
+    blocked: true,
+    noPhysicalDelete: true,
+    history
+  };
+}

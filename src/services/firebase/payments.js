@@ -20,14 +20,17 @@ export async function getPaymentsHistory(studentId) {
 /**
  * Suscribe en tiempo real al historial de pagos.
  */
-export function subscribePayments(parentUid, parentEmail, callback) {
-  if (!parentUid && !parentEmail) {
+export function subscribePayments(studentId, parentUid, parentEmail, callback) {
+  if (!studentId && !parentUid && !parentEmail) {
     callback([]);
     return () => {};
   }
-  const q = parentUid
-    ? query(collection(db, "payments"), where("parentUid", "==", parentUid))
-    : query(collection(db, "payments"), where("parentEmail", "==", parentEmail.toLowerCase()));
+
+  const q = studentId
+    ? query(collection(db, "payments"), where("studentId", "==", studentId))
+    : parentUid
+      ? query(collection(db, "payments"), where("parentUid", "==", parentUid))
+      : query(collection(db, "payments"), where("parentEmail", "==", parentEmail.toLowerCase()));
 
   return onSnapshot(q, (snapshot) => {
     const list = [];
@@ -42,8 +45,12 @@ export function subscribePayments(parentUid, parentEmail, callback) {
  * Reporta un comprobante bancario real en Firestore.
  */
 export async function reportPayment(studentId, paymentData) {
+  if (!studentId) {
+    throw new Error("studentId es obligatorio para reportar un pago");
+  }
+
   await addDoc(collection(db, "payments"), {
-    studentId: studentId || "",
+    studentId,
     studentName: paymentData.studentName || "",
     categoryName: paymentData.categoryName || "",
     amount: paymentData.amount || 0,

@@ -21,7 +21,7 @@ export function categoryNameToId(categoryName) {
  * @returns {array}
  */
 export function calculateLeaderboard(students, evaluations, allAttendance) {
-  return (students || []).map(student => {
+  return (students || []).filter(student => student.status === "active").map(student => {
     // 1. Promedio de evaluaciones
     const studentEvals = (evaluations || []).filter(ev => ev.studentName === student.name);
     let avgScore = null;
