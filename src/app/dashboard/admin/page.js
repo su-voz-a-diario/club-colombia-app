@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video, Pencil } from "lucide-react";
+import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video, Pencil, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
@@ -744,7 +744,7 @@ export default function AdminDashboard() {
                 activeTab === "students" ? "bg-slate-800 text-slate-200 border-l-2 border-[#10b981]" : "text-slate-400 hover:bg-slate-900"
               }`}
             >
-              Control de Alumnos & Overrides
+              Control de Alumnos y Excepciones
             </button>
             <button
               onClick={() => setActiveTab("billing")}
@@ -799,7 +799,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Expediente General de Alumnos</h2>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Gestión de deportistas activos y anulación manual de reglas de edad (Manual Override).</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Gestión de deportistas activos y asignación excepcional de categorías por edad (Excepciones Manuales).</p>
                 </div>
                 <button
                   onClick={() => setShowAddForm(!showAddForm)}
@@ -935,7 +935,60 @@ export default function AdminDashboard() {
                 </form>
               )}
 
-              <div className="overflow-x-auto">
+              {/* VISTA MÓVIL (TARJETAS RESPONSIVAS) */}
+              <div className="block md:hidden space-y-3 font-sans">
+                {students.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 bg-[#07090e]/50 border border-slate-850 rounded-2xl">
+                    Aún no hay registros
+                  </div>
+                ) : (
+                  students.map((student) => (
+                    <div key={student.id} className="bg-[#07090e] border border-slate-850 p-4 rounded-2xl space-y-3 text-left">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-slate-200 text-xs">{student.name}</h4>
+                          <span className="text-[10px] text-slate-450 block mt-0.5">{student.age} años</span>
+                        </div>
+                        <span className="bg-[#0e121e] px-2 py-0.5 rounded border border-slate-800 text-[9px] text-slate-350 font-medium">
+                          {student.category}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-850/50">
+                        <div>
+                          <span className="text-[8px] text-slate-500 uppercase tracking-wider block font-bold">Asignación</span>
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider mt-0.5 ${
+                            student.assignment === "automatic"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-amber-500/10 text-amber-500"
+                          }`}>
+                            {student.assignment === "automatic" ? "Automática" : "Excepción Manual"}
+                          </span>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedStudent(student)}
+                            className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer min-w-[80px] text-center"
+                          >
+                            Excepción
+                          </button>
+                          <button
+                            onClick={() => handleOpenPhoneModal(student)}
+                            className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer min-w-[80px] text-center"
+                            title="Editar teléfono del acudiente"
+                          >
+                            Teléfono
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* VISTA ESCRITORIO (TABLA TRADICIONAL) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
@@ -968,7 +1021,7 @@ export default function AdminDashboard() {
                               ? "bg-emerald-500/10 text-emerald-400"
                               : "bg-amber-500/10 text-amber-500"
                           }`}>
-                            {student.assignment === "automatic" ? "Automática" : "Override Manual"}
+                            {student.assignment === "automatic" ? "Automática" : "Excepción Manual"}
                           </span>
                         </td>
                         <td className="py-3.5 text-right space-x-1.5">
@@ -976,7 +1029,7 @@ export default function AdminDashboard() {
                             onClick={() => setSelectedStudent(student)}
                             className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
                           >
-                            Override
+                            Excepción
                           </button>
                           <button
                             onClick={() => handleOpenPhoneModal(student)}
@@ -998,7 +1051,7 @@ export default function AdminDashboard() {
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5 text-amber-500">
                       <Sparkles className="w-4 h-4" />
-                      <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría (Override): {selectedStudent.name}</h3>
+                      <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría (Excepción): {selectedStudent.name}</h3>
                     </div>
                     <button
                       onClick={() => setSelectedStudent(null)}
@@ -1051,94 +1104,96 @@ export default function AdminDashboard() {
 
               {/* MODAL / FORM DE ACTUALIZACIÓN DE TELÉFONO DE ACUDIENTE */}
               {phoneModalOpen && selectedParentStudent && (
-                <div className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in mt-6 space-y-4 font-sans text-left">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <div className="flex items-center gap-1.5 text-[#10b981]">
-                      <Video className="w-4 h-4" />
-                      <h3 className="font-display font-bold text-xs uppercase tracking-wider">Editar Teléfono del Acudiente</h3>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setPhoneModalOpen(false);
-                        setSelectedParentStudent(null);
-                        setNewParentPhone("");
-                      }}
-                      className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-
-                  <div className="text-[10px] text-slate-400 bg-slate-900/50 p-3.5 rounded-xl border border-slate-850 space-y-1.5">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Deportista:</span>
-                      <span className="font-bold text-slate-200">{selectedParentStudent.name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Nombre Acudiente:</span>
-                      <span className="font-bold text-slate-200">{selectedParentStudent.parentName || "Sin nombre registrado"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Teléfono Actual:</span>
-                      <span className="font-bold text-slate-200 font-mono">{selectedParentStudent.parentPhone || "No asignado"}</span>
-                    </div>
-                    <div className="pt-1.5 border-t border-slate-800 text-[9px] text-slate-500 italic">
-                      {selectedParentStudent.parentUid ? (
-                        <span className="text-emerald-400 font-medium">➔ El acudiente ya está registrado. Se actualizará su cuenta de autenticación SMS en Firebase Auth y su perfil.</span>
-                      ) : (
-                        <span className="text-amber-400 font-medium">➔ El acudiente no se ha registrado aún. Se corregirá el teléfono de enlace en la ficha del alumno.</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {phoneError && (
-                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-xl text-[10px] font-medium">
-                      {phoneError}
-                    </div>
-                  )}
-
-                  {phoneSuccess && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-[10px] font-medium animate-pulse">
-                      {phoneSuccess}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleUpdatePhoneSubmit} className="space-y-4">
-                    <div>
-                      <label className="text-[8px] text-slate-400 font-bold block mb-1">NUEVO NÚMERO DE TELÉFONO (E.164)</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ej. +521234567890 o 10 dígitos (se normalizará a +52...)"
-                        value={newParentPhone}
-                        onChange={(e) => setNewParentPhone(e.target.value)}
-                        className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green font-mono"
-                        disabled={phoneUpdating}
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fade-in font-sans">
+                  <div className="bg-[#07090e] border border-slate-800 p-6 rounded-2xl w-full max-w-md space-y-4 text-left shadow-2xl relative">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <div className="flex items-center gap-1.5 text-[#10b981]">
+                        <Smartphone className="w-4 h-4" />
+                        <h3 className="font-display font-bold text-xs uppercase tracking-wider">Editar Teléfono del Acudiente</h3>
+                      </div>
                       <button
-                        type="button"
                         onClick={() => {
                           setPhoneModalOpen(false);
                           setSelectedParentStudent(null);
                           setNewParentPhone("");
                         }}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-350 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
-                        disabled={phoneUpdating}
+                        className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase cursor-pointer"
                       >
-                        Cerrar
-                      </button>
-                      <button
-                        type="submit"
-                        className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
-                        disabled={phoneUpdating}
-                      >
-                        {phoneUpdating ? "Guardando..." : "Guardar Cambios"}
+                        Cancelar
                       </button>
                     </div>
-                  </form>
+
+                    <div className="text-[10px] text-slate-400 bg-slate-900/50 p-3.5 rounded-xl border border-slate-850 space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Deportista:</span>
+                        <span className="font-bold text-slate-200">{selectedParentStudent.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Nombre Acudiente:</span>
+                        <span className="font-bold text-slate-200">{selectedParentStudent.parentName || "Sin nombre registrado"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Teléfono Actual:</span>
+                        <span className="font-bold text-slate-200 font-mono">{selectedParentStudent.parentPhone || "No asignado"}</span>
+                      </div>
+                      <div className="pt-1.5 border-t border-slate-800 text-[9px] text-slate-500 italic">
+                        {selectedParentStudent.parentUid ? (
+                          <span className="text-emerald-400 font-medium">➔ El acudiente ya está registrado. Se actualizará su cuenta de autenticación SMS en Firebase Auth y su perfil.</span>
+                        ) : (
+                          <span className="text-amber-400 font-medium">➔ El acudiente no se ha registrado aún. Se corregirá el teléfono de enlace en la ficha del alumno.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {phoneError && (
+                      <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-3 rounded-xl text-[10px] font-medium">
+                        {phoneError}
+                      </div>
+                    )}
+
+                    {phoneSuccess && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl text-[10px] font-medium animate-pulse">
+                        {phoneSuccess}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleUpdatePhoneSubmit} className="space-y-4">
+                      <div>
+                        <label className="text-[8px] text-slate-400 font-bold block mb-1">NUEVO NÚMERO DE TELÉFONO (E.164)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ej. +521234567890 o 10 dígitos (se normalizará a +52...)"
+                          value={newParentPhone}
+                          onChange={(e) => setNewParentPhone(e.target.value)}
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-green font-mono"
+                          disabled={phoneUpdating}
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhoneModalOpen(false);
+                            setSelectedParentStudent(null);
+                            setNewParentPhone("");
+                          }}
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-350 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                          disabled={phoneUpdating}
+                        >
+                          Cerrar
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                          disabled={phoneUpdating}
+                        >
+                          {phoneUpdating ? "Guardando..." : "Guardar Cambios"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
