@@ -10,10 +10,12 @@ import {
   Megaphone,
   ShieldCheck,
   Trophy,
-  Users
+  Users,
+  X
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import FeatureTourModal from "@/components/FeatureTourModal";
 
 export default function Home() {
   const [announcement, setAnnouncement] = useState({
@@ -24,6 +26,9 @@ export default function Home() {
     }),
     text: "Bienvenidos a la plataforma oficial de la Escuela de Fútbol Club Colombia."
   });
+
+  const [activeChapter, setActiveChapter] = useState(null); // null | 1 | 2 | 3
+  const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "settings", "announcements"), (docSnap) => {
@@ -52,6 +57,39 @@ export default function Home() {
 
     return () => unsubscribe();
   }, []);
+
+  // CAPÍTULO 1: CONTROL DE ACCESO (PREPARADO PARA IMÁGENES REALES)
+  const accessSteps = [
+    {
+      title: "Ingreso seguro al instante",
+      description: "Tu hijo llega a los campos y muestra su credencial digital desde el móvil. El entrenador valida el ingreso al instante con un escaneo rápido.",
+      benefit: "Llegada segura",
+      type: "image",
+      imageSrc: "/images/capture-qr.png"
+    },
+    {
+      title: "Tranquilidad en tiempo real",
+      description: "El profesor confirma la asistencia en cancha en segundos. El sistema registra el ingreso y te notifica que tu hijo ya está en entrenamiento.",
+      benefit: "Asistencia confirmada",
+      type: "image",
+      imageSrc: "/images/capture-attendance.png"
+    },
+    {
+      title: "Bienestar físico monitoreado",
+      description: "El cuerpo técnico valida el estado físico de tu hijo antes del entrenamiento, registrando alertas de fatiga o reposo para garantizar su salud.",
+      benefit: "Prevención de lesiones",
+      type: "image",
+      imageSrc: "/images/capture-health.png"
+    },
+    {
+      title: "Mateo ya ingresó al entrenamiento.",
+      description: "Ahora descubre cómo el entrenador acompaña su desarrollo deportivo de forma continua.",
+      benefit: "Paso completado",
+      type: "image",
+      imageSrc: "/images/capture-confirm.png",
+      btnText: "Continuar"
+    }
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-[#07090e] selection:bg-brand-green selection:text-white">
@@ -138,37 +176,67 @@ export default function Home() {
           </div>
         </section>
 
+        {/* PANELES DE LA LANDING CONVERTIDOS EN TRIGGERS INTERACTIVOS */}
         <section className="border-t border-slate-900/80 bg-[#090d16]/30 px-6 py-14">
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-3">
-            <article className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6">
-              <ShieldCheck className="mb-4 h-7 w-7 text-[#10b981]" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200">
+            
+            {/* Panel 1: Control de Acceso */}
+            <button
+              onClick={() => setActiveChapter(1)}
+              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-[#10b981]/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#10b981]/50 group"
+            >
+              <ShieldCheck className="mb-4 h-7 w-7 text-[#10b981] group-hover:scale-105 transition-all" />
+              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
                 Control de Acceso
+                <span className="text-[8px] font-mono text-[#10b981] opacity-60 group-hover:opacity-100 transition-all font-black">
+                  VER TOUR
+                </span>
               </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              <p className="mt-2 text-xs leading-relaxed text-slate-450">
                 Credenciales digitales para validar el estado de cada deportista y apoyar el registro de ingreso a entrenamientos.
               </p>
-            </article>
+            </button>
 
-            <article className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6">
-              <CheckCircle className="mb-4 h-7 w-7 text-amber-500" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200">
+            {/* Panel 2: Seguimiento Deportivo */}
+            <button
+              onClick={() => {
+                setToastMessage("El Capítulo 2 (Seguimiento Deportivo) estará disponible tras completar su fase de integración.");
+                setTimeout(() => setToastMessage(""), 4000);
+              }}
+              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-amber-500/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500/50 group"
+            >
+              <CheckCircle className="mb-4 h-7 w-7 text-amber-500 group-hover:scale-105 transition-all" />
+              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
                 Seguimiento Deportivo
+                <span className="text-[8px] font-mono text-amber-500 opacity-0 group-hover:opacity-100 transition-all font-black">
+                  PRÓXIMAMENTE
+                </span>
               </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              <p className="mt-2 text-xs leading-relaxed text-slate-450">
                 Evaluaciones técnicas, asistencia y comunicación entre entrenadores, acudientes y administración del club.
               </p>
-            </article>
+            </button>
 
-            <article className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6">
-              <Users className="mb-4 h-7 w-7 text-sky-400" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200">
+            {/* Panel 3: Gestión Administrativa */}
+            <button
+              onClick={() => {
+                setToastMessage("El Capítulo 3 (Gestión Administrativa) estará disponible tras completar su fase de integración.");
+                setTimeout(() => setToastMessage(""), 4000);
+              }}
+              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-sky-500/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-sky-500/50 group"
+            >
+              <Users className="mb-4 h-7 w-7 text-sky-400 group-hover:scale-105 transition-all" />
+              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
                 Gestión Administrativa
+                <span className="text-[8px] font-mono text-sky-400 opacity-0 group-hover:opacity-100 transition-all font-black">
+                  PRÓXIMAMENTE
+                </span>
               </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              <p className="mt-2 text-xs leading-relaxed text-slate-450">
                 Inscripciones, pagos reportados, comunicados oficiales y organización de categorías desde una sola plataforma.
               </p>
-            </article>
+            </button>
+
           </div>
         </section>
 
@@ -202,6 +270,34 @@ export default function Home() {
       <footer className="mt-auto border-t border-slate-900/80 px-6 py-6 text-center font-mono text-[10px] text-slate-600">
         © 2026 Escuela de Fútbol Club Colombia. Todos los derechos reservados.
       </footer>
+
+      {/* RENDERIZADO DEL MODAL PARA EL CAPÍTULO 1 */}
+      <FeatureTourModal
+        isOpen={activeChapter === 1}
+        onClose={() => setActiveChapter(null)}
+        title="Control de Acceso y Asistencia"
+        accentColor="emerald"
+        steps={accessSteps}
+        onComplete={() => {
+          setToastMessage("¡Capítulo 1 completado con éxito! El Capítulo 2 (Seguimiento Deportivo) estará disponible próximamente.");
+          setTimeout(() => setToastMessage(""), 5000);
+        }}
+      />
+
+      {/* TOAST PREMIUM NOTIFICADOR */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4 animate-fade-in font-sans">
+          <div className="bg-[#0e121e]/90 border border-slate-800/80 backdrop-blur-md text-slate-200 px-4 py-3.5 rounded-2xl shadow-2xl flex items-start justify-between gap-3 text-xs">
+            <span className="leading-relaxed text-left font-medium">{toastMessage}</span>
+            <button
+              onClick={() => setToastMessage("")}
+              className="text-slate-500 hover:text-slate-350 shrink-0 p-1 -m-1 focus:outline-none cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

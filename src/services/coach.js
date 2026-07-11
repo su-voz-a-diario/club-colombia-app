@@ -1,0 +1,38 @@
+// src/services/coach.js
+
+import { isDemoActive } from "./resolver";
+import * as DemoCoach from "@/demo/coach";
+import * as FirebaseCoach from "./firebase/coach";
+
+export const CoachService = {
+  getStudentsList: () => {
+    return isDemoActive() 
+      ? DemoCoach.getStudentsList() 
+      : FirebaseCoach.getStudentsList();
+  },
+
+  subscribeStudentsList: (callback) => {
+    return isDemoActive()
+      ? DemoCoach.subscribeStudentsList(callback)
+      : FirebaseCoach.subscribeStudentsList(callback);
+  },
+
+  saveAttendanceReport: (records) => {
+    return isDemoActive()
+      ? DemoCoach.saveAttendanceReport(records)
+      : FirebaseCoach.saveAttendanceReport(records);
+  },
+
+  saveTechnicalEvaluation: (evaluationData) => {
+    return isDemoActive()
+      ? DemoCoach.saveTechnicalEvaluation(evaluationData)
+      : FirebaseCoach.saveTechnicalEvaluation(evaluationData);
+  },
+
+  markAttendance: (studentId, status) => {
+    return isDemoActive() 
+      ? DemoCoach.markAttendance(studentId, status) 
+      : FirebaseCoach.markAttendance(studentId, status);
+  }
+};
+export default CoachService;

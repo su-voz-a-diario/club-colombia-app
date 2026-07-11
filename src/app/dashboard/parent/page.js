@@ -7,8 +7,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
-import { db } from "@/lib/firebase";
-import { doc, onSnapshot, updateDoc, collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { useParent, useAttendance, usePayments, useCalendar, useQR } from "@/hooks";
 
 
 const parseVideoUrl = (url) => {
@@ -37,30 +36,15 @@ const parseVideoUrl = (url) => {
 };
 
 export default function ParentDashboard() {
-  const [studentName, setStudentName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [categoryName, setCategoryName] = useState("");
-  const [studentStatus, setStudentStatus] = useState(""); // 'active' | 'suspended' | 'pending_validation' | 'on_hold'
-  const [studentHealth, setStudentHealth] = useState("optimal"); // 'optimal' | 'fatigue' | 'injured'
   const [activeTab, setActiveTab] = useState("performance"); // 'performance' | 'billing' | 'gallery'
   const [activeSubTab, setActiveSubTab] = useState("stats"); // 'stats' | 'calendar' | 'drills'
-  const [myPayments, setMyPayments] = useState([]);
-  const [representativeName, setRepresentativeName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [parentUid, setParentUid] = useState("");
-  const [studentIds, setStudentIds] = useState([]);
-  const [isPendingAssignment, setIsPendingAssignment] = useState(false);
   const [parentPhone, setParentPhone] = useState("");
 
-
-  // Evaluaciones
-  const [evalHistory, setEvalHistory] = useState([]);
   const [chartMetric, setChartMetric] = useState("average"); // 'average' | 'speed' | 'passing' | ...
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
-  // Microciclo y Biblioteca
-  const [events, setEvents] = useState([]);
-  const [drills, setDrills] = useState([]);
   const videoRefs = useRef({});
   const [mounted, setMounted] = useState(false);
   const [activePlaybackRates, setActivePlaybackRates] = useState({});
@@ -77,6 +61,39 @@ export default function ParentDashboard() {
       setActivePlaybackRates(prev => ({ ...prev, [drillId]: speed }));
     }
   };
+
+  // Invocar custom hooks para el Demo Mode / Firebase
+  const { data: parentData, updateStatus: updateParentStatus } = useParent(parentUid);
+  
+  const studentIds = parentData?.studentIds || [];
+  const initialStudentId = studentIds[0] || parentData?.studentId || "";
+  const initialStudentName = parentData?.studentName || "";
+  
+  const { data: studentData, updateStatus: updateStudentStatus } = useQR(initialStudentId, initialStudentName);
+  
+  const resolvedStudentId = studentData?.id || initialStudentId;
+  const resolvedStudentName = studentData?.name || initialStudentName;
+  const resolvedCategoryName = studentData?.category || parentData?.categoryName || "";
+  
+  const { data: attendanceData } = useAttendance(resolvedStudentId, resolvedStudentName);
+  const { data: paymentsData, reportPayment } = usePayments(resolvedStudentId, parentUid, userEmail);
+  const { data: calendarData, updateRSVP } = useCalendar(resolvedCategoryName);
+
+  // DECLARACIÓN DE CONSTANTES DERIVADAS DE LOS HOOKS (REEMPLAZANDO LOS USESTATE Y USEEFFECTS)
+  const representativeName = parentData?.displayName || parentData?.name || "";
+  const isPendingAssignment = !parentData?.studentId && !parentData?.studentIds?.length;
+  const studentName = studentData?.name || parentData?.studentName || "";
+  const studentId = studentData?.id || initialStudentId;
+  const categoryName = studentData?.category || parentData?.categoryName || "";
+  const studentStatus = studentData?.status || parentData?.status || "";
+  const studentHealth = studentData?.healthStatus || "optimal";
+
+  const evalHistory = attendanceData?.evalHistory || [];
+  const metrics = attendanceData?.metrics || null;
+  const coachNotes = attendanceData?.coachNotes || "";
+  const drills = attendanceData?.drills || [];
+  const myPayments = paymentsData || [];
+  const events = calendarData || [];
 
   const getTrendData = () => {
     return evalHistory.map(ev => {
@@ -109,13 +126,7 @@ export default function ParentDashboard() {
     }
   };
 
-
-  // Métricas del deportista (última evaluación técnica)
-  const [metrics, setMetrics] = useState(null);
-  const [coachNotes, setCoachNotes] = useState("");
-
   useEffect(() => {
-    let unsubscribeUser = null;
     let cancelled = false;
 
     const loadSession = async () => {
@@ -128,48 +139,6 @@ export default function ParentDashboard() {
         setUserEmail(email);
         setParentUid(session.uid || "");
         setParentPhone(session.phone || "");
-
-        // 1. Escuchar perfil del usuario en Firestore
-        const userDocId = session.role === "parent" ? session.uid : email;
-        unsubscribeUser = onSnapshot(doc(db, "users", userDocId), (docSnap) => {
-          if (cancelled) return;
-          if (docSnap.exists()) {
-            const userData = docSnap.data();
-            if (userData.displayName || userData.name) setRepresentativeName(userData.displayName || userData.name);
-            
-            const ids = Array.isArray(userData.studentIds) ? userData.studentIds : [];
-            setStudentIds(ids);
-
-            if (ids.length > 0) {
-              setStudentId(ids[0]);
-              setIsPendingAssignment(false);
-            } else if (userData.studentId) {
-              setStudentId(userData.studentId);
-              setIsPendingAssignment(false);
-            } else {
-              setStudentId("");
-              setIsPendingAssignment(true);
-            }
-
-            if (userData.studentName) setStudentName(userData.studentName);
-            if (userData.categoryName) setCategoryName(userData.categoryName);
-            
-            // Si el rol es parent y está en pending_assignment, lo forzamos.
-            // Si no, dependemos del estado del estudiante más adelante.
-            if (userData.status === "pending_assignment") {
-              setIsPendingAssignment(true);
-              setStudentStatus("pending_assignment");
-            } else if (userData.status) {
-              setStudentStatus(userData.status);
-            }
-          } else {
-            // El documento del usuario no existe en la base de datos (Paso 5)
-            setStudentId("");
-            setStudentIds([]);
-            setIsPendingAssignment(true);
-            setStudentStatus("pending_assignment");
-          }
-        });
       } catch (err) {
         console.error("Error al cargar sesión segura:", err);
       }
@@ -179,100 +148,13 @@ export default function ParentDashboard() {
 
     return () => {
       cancelled = true;
-      if (unsubscribeUser) unsubscribeUser();
     };
   }, []);
-
-  // Escuchar estudiante, evaluaciones y pagos correspondientes una vez que sabemos el nombre del estudiante y el correo
-  useEffect(() => {
-    if ((!studentId && !studentName) || (!parentUid && !userEmail)) return;
-
-    // 2. Escuchar datos dinámicos del estudiante.
-    // Compatibilidad legacy: si el usuario aún no tiene studentId, se consulta por nombre temporalmente.
-    const studentRefOrQuery = studentId
-      ? doc(db, "students", studentId)
-      : query(collection(db, "students"), where("name", "==", studentName));
-
-    const unsubscribeStudent = onSnapshot(studentRefOrQuery, (snapshot) => {
-      const docSnap = studentId ? snapshot : snapshot.docs[0];
-      if (docSnap && docSnap.exists()) {
-        const studentData = docSnap.data();
-        if (studentData.studentId && !studentId) setStudentId(studentData.studentId);
-        if (studentData.name) setStudentName(studentData.name);
-        if (studentData.category) setCategoryName(studentData.category);
-        if (studentData.status) setStudentStatus(studentData.status);
-        if (studentData.healthStatus) setStudentHealth(studentData.healthStatus);
-      }
-    });
-
-    // 3. Escuchar historial de calificaciones técnicas en Firestore (de la colección 'evaluations')
-    const qEval = query(collection(db, "evaluations"), where("studentName", "==", studentName));
-    const unsubscribeEval = onSnapshot(qEval, (snapshot) => {
-      const history = [];
-      snapshot.forEach((doc) => {
-        history.push({ id: doc.id, ...doc.data() });
-      });
-      // Ordenar cronológicamente por timestamp
-      history.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-      setEvalHistory(history);
-
-      if (history.length > 0) {
-        const latest = history[history.length - 1];
-        if (latest.metrics) setMetrics(latest.metrics);
-        if (latest.tacticalNotes) setCoachNotes(latest.tacticalNotes);
-      } else {
-        setMetrics(null);
-        setCoachNotes("");
-      }
-    });
-
-    // 4. Escuchar historial de pagos del usuario en Firestore
-    const qPays = parentUid
-      ? query(collection(db, "payments"), where("parentUid", "==", parentUid))
-      : query(collection(db, "payments"), where("parentEmail", "==", userEmail.toLowerCase()));
-    const unsubscribePayments = onSnapshot(qPays, (snapshot) => {
-      const pays = [];
-      snapshot.forEach((doc) => {
-        pays.push({ id: doc.id, ...doc.data() });
-      });
-      setMyPayments(pays);
-    });
-
-    // 5. Escuchar eventos de la categoría en Firestore (Microciclos)
-    const qEvents = query(collection(db, "events"), where("category", "==", categoryName));
-    const unsubscribeEvents = onSnapshot(qEvents, (snapshot) => {
-      const evs = [];
-      snapshot.forEach((doc) => {
-        evs.push({ id: doc.id, ...doc.data() });
-      });
-      evs.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-      setEvents(evs);
-    });
-
-    // 6. Escuchar biblioteca de ejercicios multimedia (Drills)
-    const unsubscribeDrills = onSnapshot(collection(db, "drills"), (snapshot) => {
-      const drs = [];
-      snapshot.forEach((doc) => {
-        drs.push({ id: doc.id, ...doc.data() });
-      });
-      setDrills(drs);
-    });
-
-    return () => {
-      unsubscribeStudent();
-      unsubscribeEval();
-      unsubscribePayments();
-      unsubscribeEvents();
-      unsubscribeDrills();
-    };
-  }, [studentId, studentName, userEmail, parentUid, categoryName]);
 
   // Manejar respuesta de RSVP
   const handleRSVP = async (eventId, response) => {
     try {
-      await updateDoc(doc(db, "events", eventId), {
-        [`rsvps.${studentName}`]: response
-      });
+      await updateRSVP(eventId, studentName, response);
       if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50); // Vibración física ligera de confirmación
       }
@@ -285,39 +167,23 @@ export default function ParentDashboard() {
     if ((!parentUid && !userEmail) || !studentName) return;
 
     try {
-      // 1. Guardar solicitud en la colección 'payments' en Firestore
-      await addDoc(collection(db, "payments"), {
-        studentId: studentId || "",
+      // 1. Guardar solicitud en la colección 'payments' mediante el hook usePayments
+      await reportPayment({
         studentName: studentName,
         categoryName: categoryName,
         amount: amount,
         paymentType: paymentLabel,
-        date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
-        status: "pending",
         parentEmail: userEmail.toLowerCase(),
-        parentUid: parentUid || "",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        parentUid: parentUid || ""
       });
 
       // 2. Cambiar estatus a 'pending_validation' en el perfil del usuario y del estudiante
-      await updateDoc(doc(db, "users", parentUid), {
-        status: "pending_validation"
-      });
-
-      // Compatibilidad legacy: durante esta fase, solo usar nombre si todavía no existe studentId.
-      await updateDoc(doc(db, "students", studentId || studentName), {
-        status: "pending_validation",
-        billingStatus: "pending_validation",
-        dueDays: 0,
-        updatedAt: serverTimestamp()
-      });
+      await updateParentStatus("pending_validation");
+      await updateStudentStatus("pending_validation");
 
       localStorage.setItem("simulatedStatus", "pending_validation");
-
-      setStudentStatus("pending_validation");
     } catch (err) {
-      console.error("Error al reportar pago en Firestore:", err);
+      console.error("Error al reportar pago:", err);
     }
   };
 

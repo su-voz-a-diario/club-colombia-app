@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useCoach, useCalendar } from "@/hooks";
 
 export default function CoachDashboard() {
-  const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [activeTab, setActiveTab] = useState("attendance"); // 'attendance' | 'evaluation'
   const [attendanceSaved, setAttendanceSaved] = useState(false);
@@ -23,21 +21,23 @@ export default function CoachDashboard() {
   const [healthStatus, setHealthStatus] = useState("optimal"); // 'optimal' | 'fatigue' | 'injured'
   const [tacticalNotes, setTacticalNotes] = useState("");
   const [evaluationSaved, setEvaluationSaved] = useState(false);
-  const [nextEvent, setNextEvent] = useState(null);
+
+  // Invocar custom hooks para el Demo Mode / Firebase
+  const { data: coachStudents, saveAttendance: reportAttendance, saveEvaluation: reportEvaluation } = useCoach();
+  const { data: calendarEvents } = useCalendar();
+
+  // DECLARACIÓN DE CONSTANTES DERIVADAS DE LOS HOOKS (REEMPLAZANDO USESTATES REDUNDANTES)
+  const students = coachStudents || [];
+  const nowStr = new Date().toISOString().split("T")[0];
+  const nextEvent = (calendarEvents || [])
+    .filter(e => e.date >= nowStr)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] || null;
 
   useEffect(() => {
-    // Escuchar alumnos registrados en tiempo real
-    const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
-      const studs = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        studs.push({ id: doc.id, studentId: data.studentId || doc.id, ...data });
-      });
-      setStudents(studs);
-      
+    if (coachStudents && coachStudents.length > 0) {
       // Inicializar estado de asistencia si aún no se ha modificado manualmente
       setAttendance(prev => {
-        return studs.map(s => {
+        return coachStudents.map(s => {
           const existing = prev.find(a => a.id === s.id);
           return {
             id: s.id,
@@ -48,26 +48,8 @@ export default function CoachDashboard() {
           };
         });
       });
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Escuchar el siguiente evento del microciclo para contar RSVPs
-  useEffect(() => {
-    const unsubscribeEvents = onSnapshot(collection(db, "events"), (snapshot) => {
-      const evs = [];
-      snapshot.forEach(doc => {
-        evs.push({ id: doc.id, ...doc.data() });
-      });
-      const nowStr = new Date().toISOString().split("T")[0];
-      const upcoming = evs
-        .filter(e => e.date >= nowStr)
-        .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0];
-      setNextEvent(upcoming || null);
-    });
-    return () => unsubscribeEvents();
-  }, []);
+    }
+  }, [coachStudents]);
 
   // Pre-cargar estado de salud cuando se selecciona un alumno
   useEffect(() => {
@@ -90,24 +72,18 @@ export default function CoachDashboard() {
     setAttendance(prev => prev.map(a => a.id === athlete.id ? { ...a, status: newStatus } : a));
   };
 
-  // Guardar reporte de asistencia en Firestore
+  // Guardar reporte de asistencia
   const saveAttendance = async () => {
     try {
-      const dateStr = new Date().toLocaleDateString("es-CO");
-      await setDoc(doc(db, "attendance", `attendance-${dateStr.replace(/\//g, "-")}`), {
-        date: dateStr,
-        category: "Sin información disponible",
-        records: attendance.map(a => ({ name: a.name, status: a.status || "P" })),
-        timestamp: new Date().toISOString()
-      });
+      await reportAttendance(attendance);
       setAttendanceSaved(true);
       setTimeout(() => setAttendanceSaved(false), 3000);
     } catch (err) {
-      console.error("Error al guardar asistencia en Firestore:", err);
+      console.error("Error al guardar asistencia:", err);
     }
   };
 
-  // Guardar reporte de evaluación técnica en Firestore como histórico
+  // Guardar reporte de evaluación técnica en histórico
   const saveEvaluation = async (e) => {
     e.preventDefault();
     if (!selectedStudent) return;
@@ -119,22 +95,12 @@ export default function CoachDashboard() {
       const targetName = selectedStudentDoc.name;
       const metricsObj = { speed, passing, dribbling, shooting, physical, discipline };
       
-      // Guardar evaluación histórica en evaluations
-      await addDoc(collection(db, "evaluations"), {
+      await reportEvaluation({
         studentId: targetStudentId,
         studentName: targetName,
         metrics: metricsObj,
         tacticalNotes: tacticalNotes,
-        date: new Date().toLocaleDateString("es-CO"),
-        timestamp: new Date().toISOString(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-      // Actualizar el estado de salud del estudiante en su ficha de deportista
-      await updateDoc(doc(db, "students", targetStudentId), {
-        healthStatus: healthStatus,
-        updatedAt: serverTimestamp()
+        healthStatus: healthStatus
       });
 
       setEvaluationSaved(true);
@@ -145,7 +111,7 @@ export default function CoachDashboard() {
         setTacticalNotes("");
       }, 3000);
     } catch (err) {
-      console.error("Error al guardar evaluación en Firestore:", err);
+      console.error("Error al guardar evaluación:", err);
     }
   };
 
