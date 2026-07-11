@@ -27,6 +27,11 @@ export default function Login() {
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [loginError, setLoginError] = useState("");
   
+  // Requisitos de seguridad para reCAPTCHA y carga
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const loginRequestInFlightRef = useRef(false);
+  const recaptchaVerifierRef = useRef(null);
+
   // Estados para Recuperación de Contraseña
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -68,15 +73,67 @@ export default function Login() {
     return sessionResponse.json();
   };
 
-  const getRecaptchaVerifier = () => {
-    if (typeof window === "undefined") return null;
-    if (!window.ccRecaptchaVerifier) {
-      window.ccRecaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible"
-      });
+  const cleanupRecaptcha = () => {
+    if (recaptchaVerifierRef.current) {
+      try {
+        recaptchaVerifierRef.current.clear();
+      } catch (err) {
+        console.warn("Error cleaning up RecaptchaVerifier ref:", err);
+      }
+      recaptchaVerifierRef.current = null;
     }
-    return window.ccRecaptchaVerifier;
+    if (typeof window !== "undefined" && window.ccRecaptchaVerifier) {
+      try {
+        window.ccRecaptchaVerifier.clear();
+      } catch (err) {
+        console.warn("Error cleaning up global ccRecaptchaVerifier:", err);
+      }
+      delete window.ccRecaptchaVerifier;
+    }
   };
+
+  const initRecaptchaVerifier = () => {
+    if (typeof window === "undefined") return null;
+
+    const container = document.getElementById("recaptcha-container");
+    if (!container) {
+      console.error("recaptcha-container element not found in DOM.");
+      return null;
+    }
+
+    cleanupRecaptcha();
+
+    try {
+      const verifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        "expired-callback": () => {
+          cleanupRecaptcha();
+        }
+      });
+      recaptchaVerifierRef.current = verifier;
+      window.ccRecaptchaVerifier = verifier;
+      return verifier;
+    } catch (err) {
+      console.error("Error creating RecaptchaVerifier:", err);
+      return null;
+    }
+  };
+
+  // Limpiar reCAPTCHA al desmontar el componente
+  React.useEffect(() => {
+    return () => {
+      cleanupRecaptcha();
+    };
+  }, []);
+
+  // Limpiar reCAPTCHA al cambiar de pestañas, tipo de usuario o formulario de recuperación
+  React.useEffect(() => {
+    cleanupRecaptcha();
+    setPhoneCodeSent(false);
+    setConfirmationResult(null);
+    setSmsCode("");
+    setLoginError("");
+  }, [activeTab, loginUserType, showForgotPassword]);
 
   // Leer query params al cargar
   React.useEffect(() => {
@@ -234,37 +291,87 @@ export default function Login() {
     e.preventDefault();
     setLoginError("");
 
-    try {
-      if (loginUserType === "parent") {
-        const normalizedPhone = normalizeAndValidatePhone(loginPhone);
-        if (!phoneCodeSent) {
-          const verifier = getRecaptchaVerifier();
-          const result = await signInWithPhoneNumber(auth, normalizedPhone, verifier);
-          setConfirmationResult(result);
-          setPhoneCodeSent(true);
-          return;
-        }
+    if (loginRequestInFlightRef.current) return;
 
-        if (!confirmationResult) {
-          setLoginError("Primero solicita el código SMS.");
-          return;
-        }
-
-        const userCredential = await confirmationResult.confirm(smsCode);
-        await createSessionFromAuthUser(userCredential.user);
-        router.push("/dashboard/parent");
+    if (loginUserType === "parent") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (emailRegex.test(loginPhone)) {
+        setLoginError("Los padres deben iniciar sesión con su número de teléfono celular, no con correo.");
         return;
       }
 
-      // 1. Iniciar sesión en Firebase Auth
+      let normalizedPhone;
+      try {
+        normalizedPhone = normalizeAndValidatePhone(loginPhone);
+      } catch (err) {
+        setLoginError("Formato de teléfono celular inválido. Debe incluir código de país (ej. +573001234567 o +521234567890).");
+        return;
+      }
+
+      if (!phoneCodeSent) {
+        loginRequestInFlightRef.current = true;
+        setIsLoggingIn(true);
+        try {
+          const verifier = initRecaptchaVerifier();
+          if (!verifier) {
+            throw new Error("RECAPTCHA_INIT_FAILED");
+          }
+          const result = await signInWithPhoneNumber(auth, normalizedPhone, verifier);
+          setConfirmationResult(result);
+          setPhoneCodeSent(true);
+        } catch (err) {
+          console.error("Error al solicitar código SMS:", err);
+          cleanupRecaptcha();
+          if (err.message === "RECAPTCHA_INIT_FAILED" || err.message?.includes("reCAPTCHA")) {
+            setLoginError("No fue posible iniciar la verificación de seguridad. Intenta nuevamente.");
+          } else if (err.code === "auth/too-many-requests") {
+            setLoginError("Has realizado demasiados intentos. Por favor espera unos minutos antes de volver a solicitar un código.");
+          } else if (err.code === "auth/invalid-phone-number") {
+            setLoginError("El número de teléfono ingresado no es válido.");
+          } else {
+            setLoginError("No fue posible iniciar la verificación de seguridad. Intenta nuevamente.");
+          }
+        } finally {
+          setIsLoggingIn(false);
+          loginRequestInFlightRef.current = false;
+        }
+        return;
+      }
+
+      if (!confirmationResult) {
+        setLoginError("Primero solicita el código SMS.");
+        return;
+      }
+
+      loginRequestInFlightRef.current = true;
+      setIsLoggingIn(true);
+      try {
+        const userCredential = await confirmationResult.confirm(smsCode);
+        await createSessionFromAuthUser(userCredential.user);
+        router.push("/dashboard/parent");
+      } catch (err) {
+        console.error("Error al confirmar código SMS:", err);
+        if (err.code === "auth/invalid-verification-code") {
+          setLoginError("Código de verificación incorrecto. Intenta nuevamente.");
+        } else {
+          setLoginError("Ocurrió un error al verificar el código SMS. Intenta nuevamente.");
+        }
+      } finally {
+        setIsLoggingIn(false);
+        loginRequestInFlightRef.current = false;
+      }
+      return;
+    }
+
+    // Iniciar sesión con email/password (admin/coach)
+    loginRequestInFlightRef.current = true;
+    setIsLoggingIn(true);
+    try {
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail.toLowerCase(), loginPassword);
       const authUser = userCredential.user;
 
-      // 2. Leer perfil del usuario de Firestore
       let userDocSnap = await getDoc(doc(db, "users", authUser.uid));
       if (!userDocSnap.exists()) {
-        // Legacy compatibility
-        // TODO remove after migration
         userDocSnap = await getDoc(doc(db, "users", loginEmail.toLowerCase()));
       }
 
@@ -281,25 +388,21 @@ export default function Login() {
 
       await createSessionFromAuthUser(authUser);
 
-      // Redirigir
       if (user.role === "admin") {
         router.push("/dashboard/admin");
       } else if (user.role === "coach") {
         router.push("/dashboard/coach");
-      } else if (user.role === "parent") {
-        router.push("/dashboard/parent");
       }
     } catch (err) {
-      console.error("Error en login:", err);
-      if (err.code === "auth/invalid-phone-number") {
-        setLoginError("El teléfono no es válido. Usa formato internacional, por ejemplo +573001234567.");
-      } else if (err.code === "auth/invalid-verification-code") {
-        setLoginError("El código SMS no es válido.");
-      } else if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+      console.error("Error en login email/password:", err);
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential" || err.code === "auth/invalid-email") {
         setLoginError("Correo electrónico o contraseña incorrectos.");
       } else {
-        setLoginError("Error de conexión con el servidor: " + err.message);
+        setLoginError("Ocurrió un error al intentar iniciar sesión. Por favor intenta de nuevo.");
       }
+    } finally {
+      setIsLoggingIn(false);
+      loginRequestInFlightRef.current = false;
     }
   };
 
@@ -367,8 +470,23 @@ export default function Login() {
             </div>
 
             {loginError && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[11px] text-center">
-                {loginError}
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[11px] text-center space-y-2">
+                <div>{loginError}</div>
+                {loginUserType === "parent" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cleanupRecaptcha();
+                      setLoginError("");
+                      setPhoneCodeSent(false);
+                      setConfirmationResult(null);
+                      setSmsCode("");
+                    }}
+                    className="text-[9px] text-[#10b981] hover:underline block mx-auto font-bold uppercase cursor-pointer"
+                  >
+                    🔄 Reiniciar Verificación
+                  </button>
+                )}
               </div>
             )}
 
@@ -471,14 +589,15 @@ export default function Login() {
               )}
             </div>
 
-            <div id="recaptcha-container" />
+            <div id="recaptcha-container" className="my-1" />
 
             <button
               type="submit"
-              className="w-full bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 mt-2 cursor-pointer uppercase tracking-wider"
+              disabled={isLoggingIn}
+              className="w-full bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 mt-2 cursor-pointer uppercase tracking-wider"
             >
-              {loginUserType === "parent" && !phoneCodeSent ? "Enviar Código" : "Iniciar Sesión"}
-              <ArrowRight className="w-3.5 h-3.5" />
+              {isLoggingIn ? "Procesando..." : (loginUserType === "parent" && !phoneCodeSent ? "Enviar Código" : "Iniciar Sesión")}
+              {!isLoggingIn && <ArrowRight className="w-3.5 h-3.5" />}
             </button>
           </form>
         )}
