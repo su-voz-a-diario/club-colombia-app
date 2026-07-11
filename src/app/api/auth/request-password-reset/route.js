@@ -140,14 +140,8 @@ export async function POST(request) {
     });
 
   } catch (globalErr) {
-    // Registrar la excepción detallada requerida para auditoría temporal en Vercel
-    console.error("Auditoría de Excepción:", {
-      name: globalErr?.name,
-      code: globalErr?.code,
-      message: globalErr?.message,
-      stack: globalErr?.stack
-    });
-    console.warn("Recuperación de contraseña abortada de forma segura.");
+    // Auditoría de Excepción Crítica en Vercel
+    console.error("CRITICAL EXCEPTION IN PASSWORD RESET ENDPOINT:", globalErr);
 
     // Respuesta pública genérica idéntica para evitar la enumeración de cuentas (Caso Fallo)
     return NextResponse.json({
