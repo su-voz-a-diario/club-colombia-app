@@ -47,12 +47,45 @@ export function useAdminStudents() {
     }
   }, []);
 
+  const manualRegisterStudent = useCallback(async (studentData, manualPaidCash, manualPaymentConcept) => {
+    setError(null);
+    try {
+      return await AdminService.manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
+  const applyCategoryOverride = useCallback(async (studentId, newCategoryData) => {
+    setError(null);
+    try {
+      return await AdminService.applyCategoryOverride(studentId, newCategoryData);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
+  const confirmManualPayment = useCallback(async (studentIdOrName) => {
+    setError(null);
+    try {
+      return await AdminService.confirmManualPayment(studentIdOrName);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
   return {
     data,
     loading,
     error,
     refresh: fetchStudents,
-    updateStudentCategory
+    updateStudentCategory,
+    manualRegisterStudent,
+    applyCategoryOverride,
+    confirmManualPayment
   };
 }
 export default useAdminStudents;

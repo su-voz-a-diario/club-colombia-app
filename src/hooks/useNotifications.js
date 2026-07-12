@@ -24,8 +24,17 @@ export function useNotifications() {
   }, []);
 
   useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
+    setLoading(true);
+    setError(null);
+    const unsubscribe = NotificationsService.subscribeToAnnouncements((list) => {
+      setData(list);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   return {
     data,

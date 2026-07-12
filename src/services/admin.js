@@ -51,6 +51,78 @@ export const AdminService = {
     return isDemoActive()
       ? DemoAdmin.deleteEmptyStudent(student)
       : FirebaseAdmin.deleteEmptyStudent(student);
+  },
+
+  createEvent: (eventData) => {
+    return isDemoActive()
+      ? DemoAdmin.createEvent(eventData)
+      : FirebaseAdmin.createEvent(eventData);
+  },
+
+  deleteEvent: (eventId) => {
+    return isDemoActive()
+      ? DemoAdmin.deleteEvent(eventId)
+      : FirebaseAdmin.deleteEvent(eventId);
+  },
+
+  sendAnnouncement: (text) => {
+    return isDemoActive()
+      ? DemoAdmin.sendAnnouncement(text)
+      : FirebaseAdmin.sendAnnouncement(text);
+  },
+
+  saveDrill: (drillData, drillId) => {
+    return isDemoActive()
+      ? DemoAdmin.saveDrill(drillData, drillId)
+      : FirebaseAdmin.saveDrill(drillData, drillId);
+  },
+
+  deleteDrill: (drillId) => {
+    return isDemoActive()
+      ? DemoAdmin.deleteDrill(drillId)
+      : FirebaseAdmin.deleteDrill(drillId);
+  },
+
+  updateParentPhone: (parentUid, oldPhone, newPhone) => {
+    return isDemoActive()
+      ? DemoAdmin.updateParentPhone(parentUid, oldPhone, newPhone)
+      : FirebaseAdmin.updateParentPhone(parentUid, oldPhone, newPhone);
+  },
+
+  manualRegisterStudent: (studentData, manualPaidCash, manualPaymentConcept) => {
+    return isDemoActive()
+      ? DemoAdmin.manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept)
+      : FirebaseAdmin.manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept);
+  },
+
+  applyCategoryOverride: (studentId, newCategoryData) => {
+    return isDemoActive()
+      ? DemoAdmin.applyCategoryOverride(studentId, newCategoryData)
+      : FirebaseAdmin.applyCategoryOverride(studentId, newCategoryData);
+  },
+
+  confirmManualPayment: (studentIdOrName) => {
+    return isDemoActive()
+      ? DemoAdmin.confirmManualPayment(studentIdOrName)
+      : FirebaseAdmin.confirmManualPayment(studentIdOrName);
+  },
+
+  subscribePendingPayments: (callback) => {
+    return isDemoActive()
+      ? DemoAdmin.subscribePendingPayments(callback)
+      : FirebaseAdmin.subscribePendingPayments(callback);
+  },
+
+  approvePayment: (paymentId) => {
+    return isDemoActive()
+      ? DemoAdmin.approvePayment(paymentId)
+      : FirebaseAdmin.approvePayment(paymentId);
+  },
+
+  holdPayment: (paymentId, studentIdOrName) => {
+    return isDemoActive()
+      ? DemoAdmin.holdPayment(paymentId, studentIdOrName)
+      : FirebaseAdmin.holdPayment(paymentId, studentIdOrName);
   }
 };
 export default AdminService;

@@ -12,3 +12,8 @@ export { useParentStudents } from "./useParentStudents";
 export { useNotifications } from "./useNotifications";
 export { useCalendar } from "./useCalendar";
 export { useQR } from "./useQR";
+export { useAdminEvents } from "./useAdminEvents";
+export { useAdminAnnouncements } from "./useAdminAnnouncements";
+export { useAdminDrills } from "./useAdminDrills";
+export { useAdminPhones } from "./useAdminPhones";
+export { useAdminPayments } from "./useAdminPayments";

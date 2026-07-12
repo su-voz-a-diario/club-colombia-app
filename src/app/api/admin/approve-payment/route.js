@@ -105,7 +105,14 @@ export async function POST(request) {
 
     const studentData = resolved.studentSnap.data();
     const parentUid = typeof studentData.parentUid === "string" ? studentData.parentUid.trim() : "";
-    const userRef = parentUid ? db.collection("users").doc(parentUid) : null;
+    const parentEmail = typeof studentData.parentEmail === "string" ? studentData.parentEmail.trim().toLowerCase() : "";
+    
+    let userRef = null;
+    if (parentUid) {
+      userRef = db.collection("users").doc(parentUid);
+    } else if (parentEmail) {
+      userRef = db.collection("users").doc(parentEmail);
+    }
     const now = FieldValue.serverTimestamp();
 
     await db.runTransaction(async (transaction) => {

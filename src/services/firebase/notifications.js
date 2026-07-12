@@ -22,3 +22,29 @@ export async function getClubAnnouncements() {
   }
   return [];
 }
+
+/**
+ * Suscribe a los anuncios en tiempo real.
+ */
+export function subscribeToAnnouncements(callback) {
+  const docRef = doc(db, "settings", "announcements");
+  
+  import("firebase/firestore").then(({ onSnapshot }) => {
+    onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        callback([
+          {
+            id: "ann-notice",
+            date: data.date ? new Date(data.date).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "",
+            text: data.notice || ""
+          }
+        ]);
+      } else {
+        callback([]);
+      }
+    });
+  });
+
+  return () => {}; // Simplicidad para evitar promise sync lock
+}

@@ -5,9 +5,10 @@ import Link from "next/link";
 import { ShieldCheck, LogOut, Users, DollarSign, AlertTriangle, MessageSquare, PlusCircle, CheckCircle, RefreshCw, Calendar, Sparkles, Trash2, Trophy, Video, Pencil, Smartphone } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { AdminService } from "@/services/admin";
-import { categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
+import { categoryNameToId, normalizeStudentName, calculateLeaderboard } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
-import { collection, doc, onSnapshot, updateDoc, setDoc, getDoc, query, where, getDocs, deleteDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, updateDoc, getDoc, query, where, getDocs, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { useAdminStudents, useAdminEvaluations, useAdminAttendance, useAdminEvents, useAdminAnnouncements, useAdminDrills, useAdminPhones, useAdminPayments } from "@/hooks";
 
 export default function AdminDashboard() {
   const formatCurrency = (val) => {
@@ -50,8 +51,8 @@ export default function AdminDashboard() {
     inactive: ["Retiro temporal", "Cambio de club", "Cambio de ciudad", "Pausa familiar", "Otro"]
   };
 
-  // Datos de Firestore en estado
-  const [students, setStudents] = useState([]);
+  // Datos consumidos desde capa de servicios
+  const { data: students, loading: studentsLoading, error: studentsError, manualRegisterStudent, applyCategoryOverride, confirmManualPayment } = useAdminStudents();
   const [activeTab, setActiveTab] = useState("students"); // 'students' | 'billing' | 'schedules' | 'notifications'
   
   // Estados para override
@@ -81,12 +82,18 @@ export default function AdminDashboard() {
   const [manualPaidCash, setManualPaidCash] = useState(false);
   const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
-  // Cargar estudiantes y lista de validaciones de pago de Firestore
-  const [pendingPayments, setPendingPayments] = useState([]);
+  // Hook centralizado para pagos pendientes y validaciones
+  const { 
+    pendingPayments, 
+    approvePayment, 
+    holdPayment, 
+    actionLoading, 
+    error: paymentActionError, 
+    successMessage: paymentActionSuccess,
+    clearError: clearPaymentError,
+    clearSuccessMessage: clearPaymentSuccess
+  } = useAdminPayments();
   const [approvingPaymentId, setApprovingPaymentId] = useState("");
-  const approvingPaymentRef = useRef(false);
-  const [paymentActionError, setPaymentActionError] = useState("");
-  const [paymentActionSuccess, setPaymentActionSuccess] = useState("");
 
   // Herramienta segura para vincular padres con alumnos concretos
   const [parentLinkIdentifierType, setParentLinkIdentifierType] = useState("phone");
@@ -107,7 +114,6 @@ export default function AdminDashboard() {
   const [eventCategory, setEventCategory] = useState("Sub-10 Competitivo");
   const [eventDescription, setEventDescription] = useState("");
   const [eventSaved, setEventSaved] = useState(false);
-  const [events, setEvents] = useState([]);
 
   // Drill form states
   const [drillTitle, setDrillTitle] = useState("");
@@ -115,36 +121,34 @@ export default function AdminDashboard() {
   const [drillCategory, setDrillCategory] = useState("técnica");
   const [drillVideoUrl, setDrillVideoUrl] = useState("");
   const [drillSaved, setDrillSaved] = useState(false);
-  const [drills, setDrills] = useState([]);
   const [editingDrillId, setEditingDrillId] = useState(null);
 
   // Phone update modal states
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [selectedParentStudent, setSelectedParentStudent] = useState(null);
   const [newParentPhone, setNewParentPhone] = useState("");
-  const [phoneUpdating, setPhoneUpdating] = useState(false);
-  const [phoneError, setPhoneError] = useState("");
-  const [phoneSuccess, setPhoneSuccess] = useState("");
+  const { updatePhone, loading: phoneUpdating, error: phoneError, successMessage: phoneSuccess, clearState: clearPhoneState } = useAdminPhones();
 
   // Leaderboard lists
-  const [evaluations, setEvaluations] = useState([]);
-  const [allAttendance, setAllAttendance] = useState([]);
+  const { data: evaluations } = useAdminEvaluations();
+  const { data: allAttendance } = useAdminAttendance();
+  const { events, createEvent, deleteEvent } = useAdminEvents();
+  const { sendAnnouncement } = useAdminAnnouncements();
+  const { drills, saveDrill, deleteDrill } = useAdminDrills();
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
     if (!eventTitle || !eventDate || !eventTime) return;
 
     try {
-      const eventId = eventTitle.toLowerCase().replace(/[^a-z0-9]/g, "-");
-      await setDoc(doc(db, "events", eventId), {
+      await createEvent({
         title: eventTitle,
         type: eventType,
         date: eventDate,
         time: eventTime,
-        location: eventLocation || "Club Colombia Cancha Principal",
+        location: eventLocation,
         category: eventCategory,
-        description: eventDescription,
-        rsvps: {}
+        description: eventDescription
       });
 
       setEventSaved(true);
@@ -165,7 +169,7 @@ export default function AdminDashboard() {
     const confirmDel = window.confirm("¿Seguro que deseas eliminar este evento?");
     if (!confirmDel) return;
     try {
-      await deleteDoc(doc(db, "events", eventId));
+      await deleteEvent(eventId);
     } catch (err) {
       console.error("Error deleting event:", err);
     }
@@ -225,27 +229,16 @@ export default function AdminDashboard() {
     }
 
     try {
+      await saveDrill({
+        title: titleClean,
+        description: descClean,
+        category: catClean,
+        videoUrl: urlClean,
+        date: new Date().toLocaleDateString("es-CO")
+      }, editingDrillId);
+
       if (editingDrillId) {
-        // Guardar cambios del video existente
-        await setDoc(doc(db, "drills", editingDrillId), {
-          title: titleClean,
-          description: descClean,
-          category: catClean,
-          videoUrl: urlClean,
-          date: new Date().toLocaleDateString("es-CO")
-        }, { merge: true });
-        
         setEditingDrillId(null);
-      } else {
-        // Crear nuevo video
-        const drillId = titleClean.toLowerCase().replace(/[^a-z0-9]/g, "-");
-        await setDoc(doc(db, "drills", drillId), {
-          title: titleClean,
-          description: descClean,
-          category: catClean,
-          videoUrl: urlClean,
-          date: new Date().toLocaleDateString("es-CO")
-        });
       }
 
       setDrillSaved(true);
@@ -265,7 +258,7 @@ export default function AdminDashboard() {
     const confirmDel = window.confirm("¿Seguro que deseas eliminar este ejercicio de la biblioteca permanentemente?");
     if (!confirmDel) return;
     try {
-      await deleteDoc(doc(db, "drills", drillId));
+      await deleteDrill(drillId);
     } catch (err) {
       console.error("Error deleting drill:", err);
     }
@@ -274,56 +267,30 @@ export default function AdminDashboard() {
   const handleOpenPhoneModal = (student) => {
     setSelectedParentStudent(student);
     setNewParentPhone(student.parentPhone || "");
-    setPhoneError("");
-    setPhoneSuccess("");
+    clearPhoneState();
     setPhoneModalOpen(true);
   };
 
   const handleUpdatePhoneSubmit = async (e) => {
     e.preventDefault();
     if (!selectedParentStudent) return;
-    setPhoneUpdating(true);
-    setPhoneError("");
-    setPhoneSuccess("");
-
+    
     try {
-      const response = await fetch("/api/admin/update-parent-phone", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          parentUid: selectedParentStudent.parentUid || "",
-          oldPhone: selectedParentStudent.parentPhone || "",
-          newPhone: newParentPhone
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Error al actualizar el teléfono.");
-      }
-
-      setPhoneSuccess(`Teléfono actualizado exitosamente a ${data.phone}.`);
+      await updatePhone(
+        selectedParentStudent.parentUid || "",
+        selectedParentStudent.parentPhone || "",
+        newParentPhone
+      );
       
-      // Actualizar el estado local de estudiantes
-      setStudents(prev => prev.map(s => {
-        const matchesUid = selectedParentStudent.parentUid && s.parentUid === selectedParentStudent.parentUid;
-        const matchesPhone = !selectedParentStudent.parentUid && s.parentPhone === selectedParentStudent.parentPhone;
-        if (matchesUid || matchesPhone) {
-          return { ...s, parentPhone: data.phone };
-        }
-        return s;
-      }));
-
+      // La capa de servicios se actualizará automáticamente por el listener nativo
       setTimeout(() => {
         setPhoneModalOpen(false);
         setSelectedParentStudent(null);
         setNewParentPhone("");
       }, 2000);
-
     } catch (err) {
-      setPhoneError(err.message);
-    } finally {
-      setPhoneUpdating(false);
+      // El error ya es manejado por el hook y mostrado en phoneError
+      console.error("Error al actualizar teléfono desde modal:", err);
     }
   };
 
@@ -498,118 +465,12 @@ export default function AdminDashboard() {
   };
 
   const getLeaderboard = () => {
-    return students.filter(student => student.status === "active").map(student => {
-      // 1. Average rating
-      const studentEvals = evaluations.filter(ev => ev.studentName === student.name);
-      let avgScore = null;
-      if (studentEvals.length > 0) {
-        const sum = studentEvals.reduce((acc, curr) => {
-          const m = curr.metrics || {};
-          const itemAvg = ((m.speed || 0) + (m.passing || 0) + (m.dribbling || 0) + (m.shooting || 0) + (m.physical || 0) + (m.discipline || 0)) / 6;
-          return acc + itemAvg;
-        }, 0);
-        avgScore = sum / studentEvals.length;
-      }
-
-      // 2. Attendance rate
-      let totalSessions = 0;
-      let presentSessions = 0;
-      allAttendance.forEach(att => {
-        const record = att.records?.find(r => r.name === student.name);
-        if (record) {
-          totalSessions++;
-          if (record.status === "P" || record.status === "J") {
-            presentSessions++;
-          }
-        }
-      });
-      const attendanceRate = totalSessions > 0 ? (presentSessions / totalSessions) * 100 : null;
-
-      // 3. Score weighting
-      const overallPoints = avgScore !== null && attendanceRate !== null
-        ? (avgScore * 10) * 0.6 + attendanceRate * 0.4
-        : null;
-
-      return {
-        id: student.id,
-        name: student.name,
-        category: student.category,
-        avgScore: avgScore !== null ? Math.round(avgScore * 10) / 10 : null,
-        attendanceRate: attendanceRate !== null ? Math.round(attendanceRate) : null,
-        overallPoints: overallPoints !== null ? Math.round(overallPoints) : null
-      };
-    })
-      .filter(item => item.avgScore !== null || item.attendanceRate !== null)
-      .sort((a, b) => (b.overallPoints ?? -1) - (a.overallPoints ?? -1));
+    return calculateLeaderboard(students, evaluations, allAttendance);
   };
 
 
   useEffect(() => {
-    // Escuchar estudiantes en tiempo real
-    const unsubscribeStudents = onSnapshot(collection(db, "students"), (snapshot) => {
-      const studs = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        studs.push({ id: doc.id, studentId: data.studentId || doc.id, ...data });
-      });
-      setStudents(studs);
-    });
-
-    // Escuchar pagos pendientes en tiempo real
-    const qPayments = query(collection(db, "payments"), where("status", "==", "pending"));
-    const unsubscribePayments = onSnapshot(qPayments, (snapshot) => {
-      const pays = [];
-      snapshot.forEach((doc) => {
-        pays.push({ id: doc.id, ...doc.data() });
-      });
-      setPendingPayments(pays);
-    });
-
-    // Escuchar evaluaciones para la tabla de honor
-    const unsubscribeEvals = onSnapshot(collection(db, "evaluations"), (snapshot) => {
-      const evs = [];
-      snapshot.forEach((doc) => {
-        evs.push({ id: doc.id, ...doc.data() });
-      });
-      setEvaluations(evs);
-    });
-
-    // Escuchar todas las asistencias para la tabla de honor
-    const unsubscribeAttendance = onSnapshot(collection(db, "attendance"), (snapshot) => {
-      const atts = [];
-      snapshot.forEach((doc) => {
-        atts.push({ id: doc.id, ...doc.data() });
-      });
-      setAllAttendance(atts);
-    });
-
-    // Escuchar todos los eventos
-    const unsubscribeEvents = onSnapshot(collection(db, "events"), (snapshot) => {
-      const evs = [];
-      snapshot.forEach((doc) => {
-        evs.push({ id: doc.id, ...doc.data() });
-      });
-      evs.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-      setEvents(evs);
-    });
-
-    // Escuchar biblioteca de drills
-    const unsubscribeDrills = onSnapshot(collection(db, "drills"), (snapshot) => {
-      const drs = [];
-      snapshot.forEach((doc) => {
-        drs.push({ id: doc.id, ...doc.data() });
-      });
-      setDrills(drs);
-    });
-
-    return () => {
-      unsubscribeStudents();
-      unsubscribePayments();
-      unsubscribeEvals();
-      unsubscribeAttendance();
-      unsubscribeEvents();
-      unsubscribeDrills();
-    };
+    // La suscripción a pagos ahora se maneja dentro del hook useAdminPayments
   }, []);
 
   // Simular la reconciliación o envío de alertas de mora
@@ -646,120 +507,36 @@ export default function AdminDashboard() {
     }
   };
 
-  const getStudentDocRefByIdOrLegacyName = async (studentIdOrName) => {
-    let studentDocRef = doc(db, "students", studentIdOrName);
-    let studentSnap = await getDoc(studentDocRef);
-
-    if (!studentSnap.exists()) {
-      // Compatibilidad legacy: buscar por nombre solo para datos anteriores sin studentId.
-      const q = query(collection(db, "students"), where("name", "==", studentIdOrName));
-      const qSnap = await getDocs(q);
-      if (!qSnap.empty) {
-        studentDocRef = doc(db, "students", qSnap.docs[0].id);
-        studentSnap = qSnap.docs[0];
-      }
-    }
-
-    return { studentDocRef, studentSnap };
-  };
-
   // Confirmar pago manual para levantar suspensión (Directo desde lista)
-  const confirmManualPayment = async (studentIdOrName) => {
+  const handleConfirmManualPayment = async (studentIdOrName) => {
     try {
-      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrName);
-      if (!studentSnap.exists()) {
-        console.error("No se encontró el alumno a confirmar pago manual:", studentIdOrName);
-        return;
-      }
-
-      const studentData = studentSnap.data();
-
-      const isInactiveStudent = studentData.status === "inactive";
-      const studentPatch = {
-        billingStatus: "paid",
-        dueDays: 0,
-        updatedAt: serverTimestamp()
-      };
-
-      if (!isInactiveStudent) {
-        studentPatch.status = "active";
-      }
-
-      await updateDoc(studentDocRef, studentPatch);
-
-      if (studentData.parentUid && !isInactiveStudent) {
-        await updateDoc(doc(db, "users", studentData.parentUid), { status: "active" });
-      } else if (studentData.parentEmail && !isInactiveStudent) {
-        // Legacy compatibility
-        // TODO: eliminar cuando toda la base de datos tenga parentUid
-        const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
-        await updateDoc(parentRef, {
-          status: "active"
-        });
-      }
-
+      await confirmManualPayment(studentIdOrName);
     } catch (err) {
       console.error("Error en confirmManualPayment:", err);
     }
   };
 
   // Confirmar y aprobar una solicitud de pago reportada
-  const approvePendingPayment = async (paymentId) => {
-    if (approvingPaymentRef.current) return;
-
-    approvingPaymentRef.current = true;
+  const handleApprovePayment = async (paymentId) => {
+    if (actionLoading) return;
     setApprovingPaymentId(paymentId);
-    setPaymentActionError("");
-    setPaymentActionSuccess("");
-
+    
     try {
-      const response = await fetch("/api/admin/approve-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId })
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "No fue posible aprobar el pago porque no se pudo identificar de forma segura al alumno asociado. Revisa los datos del pago.");
-      }
-
-      setPaymentActionSuccess("Pago aprobado correctamente. Se actualizó la facturación del alumno asociado.");
+      await approvePayment(paymentId);
     } catch (err) {
-      console.error("Error al aprobar pago:", err);
-      setPaymentActionError(err.message || "No fue posible aprobar el pago porque no se pudo identificar de forma segura al alumno asociado. Revisa los datos del pago.");
+      // El error ya está en el hook
     } finally {
-      approvingPaymentRef.current = false;
       setApprovingPaymentId("");
     }
   };
 
   // Poner una solicitud de pago en espera
-  const holdPendingPayment = async (paymentId, studentIdOrNameFromPayment) => {
+  const handleHoldPayment = async (paymentId, studentIdOrNameFromPayment) => {
+    if (actionLoading) return;
     try {
-      // 1. Marcar el pago como en espera en Firestore
-      const paymentRef = doc(db, "payments", paymentId);
-      await updateDoc(paymentRef, { status: "on_hold", updatedAt: serverTimestamp() });
-
-      // 2. Cambiar estado del alumno a en espera
-      const { studentDocRef, studentSnap } = await getStudentDocRefByIdOrLegacyName(studentIdOrNameFromPayment);
-
-      if (studentSnap.exists()) {
-        const studentData = studentSnap.data();
-        await updateDoc(studentDocRef, { status: "on_hold", billingStatus: "on_hold", updatedAt: serverTimestamp() });
-
-        if (studentData.parentUid) {
-          await updateDoc(doc(db, "users", studentData.parentUid), { status: "on_hold" });
-        } else if (studentData.parentEmail) {
-          // Legacy compatibility
-          // TODO: eliminar cuando toda la base de datos tenga parentUid
-          const parentRef = doc(db, "users", studentData.parentEmail.toLowerCase());
-          await updateDoc(parentRef, { status: "on_hold" });
-        }
-      }
-
+      await holdPayment(paymentId, studentIdOrNameFromPayment);
     } catch (err) {
-      console.error("Error al poner pago en espera:", err);
+      // El error ya está en el hook
     }
   };
 
@@ -779,26 +556,15 @@ export default function AdminDashboard() {
     }
 
     try {
-      const studentDocRef = doc(collection(db, "students"));
-      const newStudentId = studentDocRef.id;
-      const normalizedName = normalizeStudentName(manualStudentName);
-      const categoryId = categoryNameToId(category);
-      const normalizedParentPhone = normalizeAndValidatePhone(manualParentPhone);
-      const parentUid = "";
-
-      localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
-
-      // 1. Guardar deportista en la colección 'students' con ID estable.
-      await setDoc(studentDocRef, {
-        studentId: newStudentId,
+      const studentData = {
         name: manualStudentName,
-        normalizedName,
+        normalizedName: normalizeStudentName(manualStudentName),
         age: ageNum,
         parentName: manualParentName,
-        parentPhone: normalizedParentPhone,
+        parentPhone: normalizeAndValidatePhone(manualParentPhone),
         parentEmail: "",
-        parentUid,
-        categoryId,
+        parentUid: "",
+        categoryId: categoryNameToId(category),
         category: category,
         assignedCoachUid: "",
         assignment: "automatic",
@@ -806,26 +572,10 @@ export default function AdminDashboard() {
         billingStatus: manualPaidCash ? "paid" : "pending_payment",
         healthStatus: "optimal",
         dueDays: manualPaidCash ? 0 : 7,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      };
 
-      // 3. Si pagó en efectivo/transferencia directa, registrar en Firestore pagos
-      if (manualPaidCash) {
-        await addDoc(collection(db, "payments"), {
-          studentId: newStudentId,
-          studentName: manualStudentName,
-          categoryName: category,
-          amount: manualPaymentConcept === "monthly" ? 300 : 50,
-          paymentType: manualPaymentConcept === "monthly" ? "Mensualidad Completa" : "Clase Individual",
-          date: new Date().toLocaleDateString("es-MX") + " " + new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
-          status: "approved",
-          parentEmail: "",
-          parentUid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      }
+      await manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept);
+      localStorage.setItem("simulatedStatus", manualPaidCash ? "active" : "suspended");
     } catch (err) {
       console.error("Error en registro manual de Firestore:", err);
     }
@@ -846,15 +596,15 @@ export default function AdminDashboard() {
     if (!selectedStudent) return;
 
     try {
-      // Modificar en Firestore
-      const studentRef = doc(db, "students", selectedStudent.studentId || selectedStudent.id || selectedStudent.name);
-      await updateDoc(studentRef, {
+      const studentId = selectedStudent.studentId || selectedStudent.id || selectedStudent.name;
+      const newCategoryData = {
         categoryId: categoryNameToId(newCategory),
         category: newCategory,
         assignment: "manual",
-        overrideReason: overrideReason || "Ajuste manual del cuerpo técnico",
-        updatedAt: serverTimestamp()
-      });
+        overrideReason: overrideReason || "Ajuste manual del cuerpo técnico"
+      };
+      
+      await applyCategoryOverride(studentId, newCategoryData);
     } catch (err) {
       console.error("Error al aplicar override en Firestore:", err);
     }
@@ -868,18 +618,14 @@ export default function AdminDashboard() {
   const handleSendNotification = async (e) => {
     e.preventDefault();
     try {
-      await setDoc(doc(db, "settings", "announcements"), {
-        notice: notificationText,
-        date: new Date().toISOString()
-      });
-      localStorage.setItem("adminNotice", notificationText);
+      await sendAnnouncement(notificationText);
       setNotificationStatus(true);
       setTimeout(() => {
         setNotificationStatus(false);
         setNotificationText("");
       }, 3000);
     } catch (err) {
-      console.error("Error en envío de comunicado a Firestore:", err);
+      console.error("Error en envío de comunicado:", err);
     }
   };
 
@@ -1862,15 +1608,16 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button
-                            onClick={() => approvePendingPayment(payment.id)}
-                            disabled={approvingPaymentId === payment.id}
+                            onClick={() => handleApprovePayment(payment.id)}
+                            disabled={approvingPaymentId === payment.id || actionLoading}
                             className="w-full sm:w-auto bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed font-sans"
                           >
                             {approvingPaymentId === payment.id ? "Aprobando..." : "OK (Aprobar)"}
                           </button>
                           <button
-                            onClick={() => holdPendingPayment(payment.id, payment.studentId || payment.studentName)}
-                            className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
+                            onClick={() => handleHoldPayment(payment.id, payment.studentId || payment.studentName)}
+                            disabled={actionLoading}
+                            className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer font-sans"
                           >
                             En Espera
                           </button>
@@ -1954,7 +1701,7 @@ export default function AdminDashboard() {
                                 holdPendingPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
                               } else {
                                 localStorage.setItem("simulatedStatus", "on_hold");
-                                setStudents(prev => prev.map(s => s.id === student.id ? { ...s, status: "on_hold" } : s));
+                                // La UI se actualizará al recibir el nuevo estado desde Firebase/Demo a través del hook.
                               }
                             }}
                             className="bg-amber-500 text-slate-950 hover:bg-amber-600 font-display font-black text-[9px] px-3.5 py-2 rounded-xl transition-all cursor-pointer font-sans"

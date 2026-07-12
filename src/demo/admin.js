@@ -99,3 +99,104 @@ export async function deleteEmptyStudent(student) {
     history
   };
 }
+
+export async function createEvent(eventData) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Evento creado:`, eventData);
+  const eventId = eventData.title ? eventData.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "demo-event";
+  return { success: true, eventId };
+}
+
+export async function deleteEvent(eventId) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Evento eliminado: ${eventId}`);
+  return { success: true };
+}
+
+export async function sendAnnouncement(text) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Comunicado enviado: ${text}`);
+  if (typeof window !== "undefined") {
+    localStorage.setItem("adminNotice", text);
+    // Para que los listeners locales se actualicen (simulación simple)
+    window.dispatchEvent(new Event("storage"));
+  }
+  return { success: true };
+}
+
+export async function saveDrill(drillData, drillId = null) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Drill guardado:`, drillData);
+  const finalId = drillId || (drillData.title ? drillData.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "demo-drill");
+  return { success: true, drillId: finalId };
+}
+
+export async function deleteDrill(drillId) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Drill eliminado: ${drillId}`);
+  return { success: true };
+}
+
+export async function updateParentPhone(parentUid, oldPhone, newPhone) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Teléfono de acudiente actualizado de ${oldPhone} a ${newPhone}`);
+  
+  if (!newPhone) {
+    throw new Error("El nuevo número de teléfono es obligatorio.");
+  }
+  
+  // Normalización simulada sencilla (para demo, agregar +52 si no lo tiene)
+  const normalizedPhone = newPhone.startsWith("+") ? newPhone : `+52${newPhone.replace(/\D/g, "")}`;
+  
+  return { success: true, phone: normalizedPhone, registered: !!parentUid };
+}
+
+export async function manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Estudiante registrado manualmente:`, studentData);
+  return { success: true, studentId: `demo_student_${Date.now()}` };
+}
+
+export async function applyCategoryOverride(studentId, newCategoryData) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Override aplicado a ${studentId}:`, newCategoryData);
+  return { success: true };
+}
+
+export async function confirmManualPayment(studentIdOrName) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Pago confirmado manualmente para: ${studentIdOrName}`);
+  return { success: true };
+}
+
+export function subscribePendingPayments(callback) {
+  console.log(`[DEMO MODE] Suscribiendo a pagos pendientes...`);
+  const initialPays = [
+    {
+      id: "demo_payment_1",
+      studentId: "123",
+      studentName: "Juan Pérez (Demo)",
+      categoryName: "Sub-10 Competitivo",
+      amount: 300,
+      paymentType: "Transferencia",
+      date: new Date().toLocaleDateString("es-CO"),
+      status: "pending"
+    }
+  ];
+  callback(initialPays);
+  return () => {
+    console.log(`[DEMO MODE] Desuscrito de pagos pendientes.`);
+  };
+}
+
+export async function approvePayment(paymentId) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Pago ${paymentId} aprobado.`);
+  return { success: true };
+}
+
+export async function holdPayment(paymentId, studentIdOrName) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Pago ${paymentId} puesto en espera para ${studentIdOrName}.`);
+  return { success: true };
+}

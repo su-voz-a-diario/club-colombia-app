@@ -1,0 +1,75 @@
+import { useState, useEffect, useCallback } from "react";
+import { AdminService } from "@/services/admin";
+
+/**
+ * Custom Hook para la gestión administrativa de validación de pagos.
+ * Abstrae la lectura en tiempo real y las mutaciones.
+ * @returns {{ pendingPayments: array, loading: boolean, error: any, approvePayment: function, holdPayment: function, clearError: function, successMessage: string, clearSuccessMessage: function }}
+ */
+export function useAdminPayments() {
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    
+    const unsubscribe = AdminService.subscribePendingPayments((pays) => {
+      setPendingPayments(pays);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+  const clearSuccessMessage = useCallback(() => setSuccessMessage(""), []);
+
+  const approvePayment = useCallback(async (paymentId) => {
+    setActionLoading(true);
+    setError(null);
+    setSuccessMessage("");
+    try {
+      const data = await AdminService.approvePayment(paymentId);
+      setSuccessMessage("Pago aprobado correctamente. Se actualizó la facturación del alumno asociado.");
+      return data;
+    } catch (err) {
+      setError(err.message || "Error al aprobar pago");
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, []);
+
+  const holdPayment = useCallback(async (paymentId, studentIdOrName) => {
+    setActionLoading(true);
+    setError(null);
+    setSuccessMessage("");
+    try {
+      const data = await AdminService.holdPayment(paymentId, studentIdOrName);
+      setSuccessMessage("El pago ha sido puesto en espera y el estudiante ha sido notificado.");
+      return data;
+    } catch (err) {
+      setError(err.message || "Error al retener pago");
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, []);
+
+  return {
+    pendingPayments,
+    loading,
+    error,
+    successMessage,
+    actionLoading,
+    approvePayment,
+    holdPayment,
+    clearError,
+    clearSuccessMessage
+  };
+}
+export default useAdminPayments;

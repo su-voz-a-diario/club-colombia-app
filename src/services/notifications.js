@@ -13,6 +13,15 @@ export const NotificationsService = {
     return isDemoActive() 
       ? DemoNotifications.getClubAnnouncements() 
       : FirebaseNotifications.getClubAnnouncements();
+  },
+
+  /**
+   * Suscribe a los comunicados en tiempo real.
+   */
+  subscribeToAnnouncements: (callback) => {
+    return isDemoActive()
+      ? DemoNotifications.subscribeToAnnouncements(callback)
+      : FirebaseNotifications.subscribeToAnnouncements(callback);
   }
 };
 export default NotificationsService;
