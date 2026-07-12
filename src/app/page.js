@@ -34,29 +34,29 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState("");
   const [missingScreenshots, setMissingScreenshots] = useState({});
 
-  // CAPÍTULO 1: CONTROL DE ACCESO (PREPARADO PARA IMÁGENES REALES)
+  // PASOS DEL TOUR (PREPARADO PARA LAS NUEVAS IMÁGENES FOTOREALISTAS)
   const accessSteps = [
     {
-      title: "Pase de Lista Inmediato",
-      description: "El entrenador registra la asistencia y marca inasistencias en segundos desde la cancha. La plataforma sincroniza el estado en tiempo real.",
+      title: "Control de Acceso Real",
+      description: "Pase de lista inmediato desde la cancha mediante QRs únicos. Alertas médicas automatizadas y notificaciones instantáneas a la aplicación del padre.",
       benefit: "Asistencia Ágil",
       type: "image",
-      imageSrc: "/screenshots/coach_asistencia.png"
+      imageSrc: "/screenshots/coach_asistencia.jpg"
     },
     {
-      title: "Evaluación Técnica y Médica",
-      description: "El cuerpo técnico califica el rendimiento continuo y registra el estado de salud, generando alertas inmediatas ante lesiones o fatiga.",
+      title: "Desarrollo Deportivo",
+      description: "Rendimiento evaluado constantemente. Transparencia total en el progreso técnico mediante gráficos avanzados.",
       benefit: "Control Integral",
       type: "image",
-      imageSrc: "/screenshots/coach_evaluacion_salud.png"
+      imageSrc: "/screenshots/coach_evaluacion_salud.jpg"
     },
     {
-      title: "Transparencia Total para el Padre",
-      description: "El representante visualiza el desarrollo deportivo, historial de asistencia y alertas médicas de su hijo desde su propio dispositivo móvil.",
-      benefit: "Monitoreo Constante",
+      title: "Gestión Centralizada",
+      description: "Conecta a la directiva, cuerpo técnico y familias en un ecosistema unificado. Controla la tesorería y procesos deportivos en tiempo real.",
+      benefit: "Administración Total",
       type: "image",
-      imageSrc: "/screenshots/padre_desarrollo.png",
-      btnText: "Continuar"
+      imageSrc: "/screenshots/admin_dashboard_premium.jpg",
+      btnText: "Finalizar Tour"
     }
   ];
 
@@ -147,9 +147,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* BENTO GRID PREMIUM */}
+        {/* BENTO GRID PREMIUM CON MOCKUPS FOTOREALISTAS */}
         <section className="border-t border-slate-900/80 bg-[#07090e] px-6 py-16 sm:py-24 overflow-hidden">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-6xl">
             <div className="mb-12 text-center">
               <span className="inline-flex items-center rounded-full border border-[#10b981]/20 bg-[#10b981]/5 px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-[#10b981] mb-4">
                 Plataforma Integral
@@ -158,114 +158,98 @@ export default function Home() {
                 Tecnología al <span className="text-[#10b981]">Servicio del Deporte</span>
               </h2>
               <p className="mt-4 text-sm text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Una solución completa diseñada para maximizar el rendimiento deportivo, garantizar la transparencia financiera y optimizar la organización de Club Colombia.
+                Explora las interfaces diseñadas para maximizar el rendimiento deportivo, garantizar la transparencia financiera y optimizar la organización.
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 auto-rows-[400px]">
               
-              {/* Tarjeta 1: Control de Acceso (Ocupa 2 columnas en md) */}
-              <div className="md:col-span-2 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-br from-[#0e121e]/80 to-[#07090e] p-8 transition-all duration-500 hover:border-[#10b981]/40 hover:shadow-[0_0_40px_rgba(16,185,129,0.1)]">
-                <div className="absolute inset-0 bg-[#10b981]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#10b981]/20 blur-[100px] rounded-full group-hover:bg-[#10b981]/30 transition-all duration-700" />
+              {/* Tarjeta 1: Control de Acceso */}
+              <button 
+                onClick={() => setActiveChapter(1)}
+                className="md:col-span-1 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-slate-900 text-left transition-all duration-500 hover:border-[#10b981]/50 hover:shadow-[0_0_40px_rgba(16,185,129,0.15)] focus:outline-none"
+              >
+                <div className="absolute inset-0 w-full h-full">
+                  <Image 
+                    src="/screenshots/coach_asistencia.jpg" 
+                    alt="Control de Acceso" 
+                    fill
+                    className="object-cover object-top opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-700" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/80 to-transparent" />
+                </div>
                 
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div>
-                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#10b981]/10 text-[#10b981] mb-5 border border-[#10b981]/20 group-hover:scale-110 transition-transform duration-500">
-                      <ShieldCheck className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-display text-2xl font-black text-slate-100 uppercase tracking-wide">Control de Acceso Real</h3>
-                    <p className="mt-2 text-sm text-slate-400 max-w-sm leading-relaxed">Pase de lista inmediato desde la cancha mediante QRs únicos. Alertas médicas automatizadas y notificaciones instantáneas a la aplicación del padre.</p>
+                <div className="absolute inset-x-0 bottom-0 p-8 z-10 flex flex-col justify-end h-full">
+                  <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#10b981]/10 text-[#10b981] mb-4 border border-[#10b981]/20 w-max group-hover:-translate-y-1 transition-transform duration-300">
+                    <ShieldCheck className="w-6 h-6" />
                   </div>
+                  <h3 className="font-display text-xl font-black text-slate-100 uppercase tracking-wide">Control de Acceso</h3>
+                  <p className="mt-2 text-sm text-slate-400 line-clamp-2">Pase de lista inmediato con códigos QR y notificaciones a padres.</p>
                   
-                  {/* UI Simulada - Player Card */}
-                  <div className="mt-6 flex items-center gap-4 bg-slate-950/90 p-4 rounded-2xl border border-slate-800/80 backdrop-blur-md w-max shadow-[0_20px_40px_rgba(0,0,0,0.5)] transform translate-y-6 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-500 ease-out">
-                    <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-[#10b981] flex items-center justify-center overflow-hidden shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-                      <div className="w-7 h-7 rounded-full bg-slate-600 animate-pulse" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-200">Ingreso Autorizado</div>
-                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">17:45 PM • Categoría 2010</div>
-                    </div>
-                    <div className="ml-6 w-8 h-8 rounded-full bg-[#10b981]/20 flex items-center justify-center text-[#10b981]">
-                      <Check className="w-4 h-4" />
-                    </div>
+                  <div className="mt-4 inline-flex items-center text-[#10b981] text-xs font-bold uppercase tracking-wider opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                    Explorar Función <ArrowRight className="ml-2 w-4 h-4" />
                   </div>
                 </div>
-              </div>
+              </button>
 
               {/* Tarjeta 2: Seguimiento Deportivo */}
-              <div className="relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-bl from-[#0e121e]/80 to-[#07090e] p-8 transition-all duration-500 hover:border-amber-500/40 hover:shadow-[0_0_40px_rgba(245,158,11,0.1)]">
-                <div className="absolute inset-0 bg-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full group-hover:bg-amber-500/20 transition-all duration-700" />
+              <button 
+                onClick={() => setActiveChapter(2)}
+                className="md:col-span-1 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-slate-900 text-left transition-all duration-500 hover:border-amber-500/50 hover:shadow-[0_0_40px_rgba(245,158,11,0.15)] focus:outline-none"
+              >
+                <div className="absolute inset-0 w-full h-full">
+                  <Image 
+                    src="/screenshots/coach_evaluacion_salud.jpg" 
+                    alt="Seguimiento Deportivo" 
+                    fill
+                    className="object-cover object-top opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-700" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/80 to-transparent" />
+                </div>
                 
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div>
-                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/10 text-amber-500 mb-5 border border-amber-500/20 group-hover:scale-110 transition-transform duration-500">
-                      <Trophy className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-display text-xl font-black text-slate-100 uppercase tracking-wide">Desarrollo Deportivo</h3>
-                    <p className="mt-2 text-xs text-slate-400 leading-relaxed">Rendimiento evaluado constantemente. Transparencia total en el progreso técnico.</p>
+                <div className="absolute inset-x-0 bottom-0 p-8 z-10 flex flex-col justify-end h-full">
+                  <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/10 text-amber-500 mb-4 border border-amber-500/20 w-max group-hover:-translate-y-1 transition-transform duration-300">
+                    <Trophy className="w-6 h-6" />
                   </div>
+                  <h3 className="font-display text-xl font-black text-slate-100 uppercase tracking-wide">Desarrollo Deportivo</h3>
+                  <p className="mt-2 text-sm text-slate-400 line-clamp-2">Evaluaciones técnicas y gráficos de rendimiento de cada atleta.</p>
                   
-                  {/* UI Simulada - Radar Abstracto */}
-                  <div className="mt-4 flex justify-center opacity-60 group-hover:opacity-100 transform scale-95 group-hover:scale-105 transition-all duration-700">
-                    <svg width="110" height="110" viewBox="0 0 100 100" className="animate-[spin_20s_linear_infinite]">
-                      <polygon points="50,5 95,30 95,75 50,95 5,75 5,30" fill="none" stroke="#fbbf24" strokeWidth="0.5" strokeDasharray="2 4" className="opacity-30" />
-                      <polygon points="50,15 85,35 85,65 50,85 15,65 15,35" fill="none" stroke="#fbbf24" strokeWidth="1" className="opacity-40" />
-                      <polygon points="50,25 75,45 65,70 50,80 30,60 35,35" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="1.5" className="filter drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
-                      <circle cx="50" cy="50" r="2" fill="#fbbf24" />
-                      <circle cx="50" cy="25" r="3" fill="#fbbf24" className="animate-pulse" />
-                      <circle cx="75" cy="45" r="2.5" fill="#fbbf24" />
-                      <circle cx="65" cy="70" r="3" fill="#fbbf24" />
-                      <circle cx="50" cy="80" r="2" fill="#fbbf24" />
-                      <circle cx="30" cy="60" r="2.5" fill="#fbbf24" />
-                      <circle cx="35" cy="35" r="2" fill="#fbbf24" />
-                    </svg>
+                  <div className="mt-4 inline-flex items-center text-amber-500 text-xs font-bold uppercase tracking-wider opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                    Explorar Función <ArrowRight className="ml-2 w-4 h-4" />
                   </div>
                 </div>
-              </div>
+              </button>
 
-              {/* Tarjeta 3: Gestión Administrativa (Ocupa 3 columnas) */}
-              <div className="md:col-span-3 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-tr from-[#0e121e]/80 to-[#07090e] p-8 sm:p-10 transition-all duration-500 hover:border-sky-500/40 hover:shadow-[0_0_40px_rgba(14,165,233,0.1)]">
-                <div className="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="absolute right-1/4 -bottom-32 w-96 h-96 bg-sky-500/10 blur-[120px] rounded-full group-hover:bg-sky-500/20 transition-all duration-700" />
+              {/* Tarjeta 3: Gestión Administrativa */}
+              <button 
+                onClick={() => setActiveChapter(3)}
+                className="md:col-span-2 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-slate-900 text-left transition-all duration-500 hover:border-sky-500/50 hover:shadow-[0_0_40px_rgba(14,165,233,0.15)] focus:outline-none"
+              >
+                <div className="absolute inset-0 w-full h-full">
+                  <Image 
+                    src="/screenshots/admin_dashboard_premium.jpg" 
+                    alt="Gestión Administrativa" 
+                    fill
+                    className="object-cover object-left opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-700" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-[#07090e]/60 to-transparent md:bg-gradient-to-r md:from-[#07090e] md:via-[#07090e]/80 md:to-transparent" />
+                </div>
                 
-                <div className="relative z-10 flex flex-col md:flex-row items-center gap-10 h-full">
-                  <div className="flex-1 text-center md:text-left">
-                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-sky-500/10 text-sky-400 mb-5 border border-sky-500/20 group-hover:scale-110 transition-transform duration-500">
-                      <Users className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-display text-2xl font-black text-slate-100 uppercase tracking-wide">Gestión Centralizada</h3>
-                    <p className="mt-3 text-sm text-slate-400 max-w-lg mx-auto md:mx-0 leading-relaxed">
-                      Conecta a la directiva, el cuerpo técnico y las familias en un ecosistema unificado. Controla la tesorería, emite comunicados oficiales y organiza las categorías deportivas con procesos automatizados.
-                    </p>
+                <div className="absolute inset-0 p-8 z-10 flex flex-col justify-end md:justify-center md:w-1/2">
+                  <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-sky-500/10 text-sky-400 mb-4 border border-sky-500/20 w-max group-hover:-translate-y-1 transition-transform duration-300">
+                    <Users className="w-6 h-6" />
                   </div>
+                  <h3 className="font-display text-2xl font-black text-slate-100 uppercase tracking-wide">Gestión Centralizada</h3>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Conecta a la directiva, cuerpo técnico y familias en un ecosistema unificado. Controla la tesorería y estadísticas de crecimiento en tiempo real.
+                  </p>
                   
-                  {/* UI Simulada - Iconos Conectados */}
-                  <div className="flex-1 flex justify-center items-center w-full py-6">
-                    <div className="relative flex items-center justify-center gap-4 sm:gap-8 w-full max-w-sm">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-10 group-hover:-translate-y-2 group-hover:text-slate-300 group-hover:border-slate-700 transition-all duration-500">
-                        <Users className="w-6 h-6" />
-                      </div>
-                      
-                      {/* Línea animada conectora */}
-                      <div className="absolute left-1/2 top-1/2 w-[70%] h-[1px] bg-gradient-to-r from-transparent via-sky-500/20 to-transparent -translate-x-1/2 -translate-y-1/2 overflow-hidden">
-                        <div className="w-1/2 h-full bg-gradient-to-r from-transparent via-sky-400 to-transparent animate-[translateX_2s_ease-in-out_infinite]" />
-                      </div>
-                      
-                      <div className="w-20 h-20 rounded-[1.75rem] bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-[0_0_30px_rgba(14,165,233,0.15)] z-20 group-hover:scale-110 group-hover:bg-sky-500/20 transition-all duration-500">
-                        <ShieldCheck className="w-10 h-10 drop-shadow-[0_0_10px_rgba(14,165,233,0.5)]" />
-                      </div>
-                      
-                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-10 group-hover:-translate-y-2 group-hover:text-slate-300 group-hover:border-slate-700 transition-all duration-500 delay-100">
-                        <ChartBar className="w-6 h-6" />
-                      </div>
-                    </div>
+                  <div className="mt-6 inline-flex items-center text-sky-400 text-xs font-bold uppercase tracking-wider opacity-0 translate-x-[-10px] group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                    Explorar Función <ArrowRight className="ml-2 w-4 h-4" />
                   </div>
                 </div>
-              </div>
-              
+              </button>
+
             </div>
           </div>
         </section>
@@ -304,13 +288,14 @@ export default function Home() {
 
       {/* RENDERIZADO DEL MODAL PARA EL CAPÍTULO 1 */}
       <FeatureTourModal
-        isOpen={activeChapter === 1}
+        isOpen={activeChapter !== null}
         onClose={() => setActiveChapter(null)}
-        title="Control de Acceso y Asistencia"
+        initialStep={activeChapter ? activeChapter - 1 : 0}
+        title="Detalle de Funcionalidad"
         accentColor="emerald"
         steps={accessSteps}
         onComplete={() => {
-          setToastMessage("¡Capítulo 1 completado con éxito! El Capítulo 2 (Seguimiento Deportivo) estará disponible próximamente.");
+          setToastMessage("¡Gracias por explorar nuestras funciones premium!");
           setTimeout(() => setToastMessage(""), 5000);
         }}
       />

@@ -46,9 +46,18 @@ export default function FeatureTourModal({
   accentColor = "emerald",
   steps = [],
   onComplete,
+  initialStep = 0,
 }) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [direction, setDirection] = useState(0); // -1: atrás, 1: adelante
+
+  // Efecto para reiniciar el step cuando se abre con uno diferente
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(initialStep);
+      setDirection(0);
+    }
+  }, [isOpen, initialStep]);
 
   const theme = THEME_MAP[accentColor] || THEME_MAP.emerald;
   const modalRef = useRef(null);
