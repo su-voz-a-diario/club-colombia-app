@@ -400,3 +400,30 @@ export async function holdPayment(paymentId, studentIdOrName) {
   }
   return { success: true };
 }
+
+/**
+ * Audita alumnos activos con más de 5 días de mora y los suspende junto con sus acudientes.
+ */
+export async function processSuspensions() {
+  const { doc, collection, query, where, getDocs, updateDoc } = await import("firebase/firestore");
+  
+  let suspendedCount = 0;
+  const q = query(collection(db, "students"), where("status", "==", "active"), where("dueDays", ">", 5));
+  const querySnapshot = await getDocs(q);
+  
+  for (const d of querySnapshot.docs) {
+    await updateDoc(doc(db, "students", d.id), { status: "suspended" });
+    suspendedCount++;
+    
+    // También actualizar en user
+    const studentData = d.data();
+    if (studentData.parentUid) {
+      await updateDoc(doc(db, "users", studentData.parentUid), { status: "suspended" });
+    } else if (studentData.parentEmail) {
+      // Legacy compatibility
+      await updateDoc(doc(db, "users", studentData.parentEmail.toLowerCase()), { status: "suspended" });
+    }
+  }
+  
+  return { success: true, count: suspendedCount };
+}

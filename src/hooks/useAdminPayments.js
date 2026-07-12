@@ -60,6 +60,22 @@ export function useAdminPayments() {
     }
   }, []);
 
+  const processSuspensions = useCallback(async () => {
+    setActionLoading(true);
+    setError(null);
+    setSuccessMessage("");
+    try {
+      const data = await AdminService.processSuspensions();
+      setSuccessMessage(`Se han auditado los estudiantes con mora y se suspendieron ${data.count} cuentas exitosamente.`);
+      return data;
+    } catch (err) {
+      setError(err.message || "Error al procesar suspensiones por mora");
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, []);
+
   return {
     pendingPayments,
     loading,
@@ -68,6 +84,7 @@ export function useAdminPayments() {
     actionLoading,
     approvePayment,
     holdPayment,
+    processSuspensions,
     clearError,
     clearSuccessMessage
   };

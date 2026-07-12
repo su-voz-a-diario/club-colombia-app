@@ -200,3 +200,9 @@ export async function holdPayment(paymentId, studentIdOrName) {
   console.log(`[DEMO MODE] Pago ${paymentId} puesto en espera para ${studentIdOrName}.`);
   return { success: true };
 }
+
+export async function processSuspensions() {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Mora auditada. Avisos enviados a estudiantes suspendidos.`);
+  return { success: true, count: 2 };
+}

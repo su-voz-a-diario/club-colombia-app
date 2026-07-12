@@ -123,6 +123,12 @@ export const AdminService = {
     return isDemoActive()
       ? DemoAdmin.holdPayment(paymentId, studentIdOrName)
       : FirebaseAdmin.holdPayment(paymentId, studentIdOrName);
+  },
+
+  processSuspensions: () => {
+    return isDemoActive()
+      ? DemoAdmin.processSuspensions()
+      : FirebaseAdmin.processSuspensions();
   }
 };
 export default AdminService;

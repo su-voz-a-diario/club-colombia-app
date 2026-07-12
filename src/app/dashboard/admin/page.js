@@ -86,7 +86,8 @@ export default function AdminDashboard() {
   const { 
     pendingPayments, 
     approvePayment, 
-    holdPayment, 
+    holdPayment,
+    processSuspensions, 
     actionLoading, 
     error: paymentActionError, 
     successMessage: paymentActionSuccess,
@@ -473,39 +474,7 @@ export default function AdminDashboard() {
     // La suscripción a pagos ahora se maneja dentro del hook useAdminPayments
   }, []);
 
-  // Simular la reconciliación o envío de alertas de mora
-  const [sendingAlerts, setSendingAlerts] = useState(false);
-  const [alertSuccess, setAlertSuccess] = useState(false);
 
-  const triggerMoraAlerts = async () => {
-    setSendingAlerts(true);
-    try {
-      // En una base de datos real, podemos simular que marcamos al primer alumno suspendido 
-      // o consultar a la API. Para que sea real en Firestore, buscamos alumnos activos con retraso 
-      // y actualizamos su estado a suspendido.
-      const q = query(collection(db, "students"), where("status", "==", "active"), where("dueDays", ">", 5));
-      const querySnapshot = await getDocs(q);
-      for (const d of querySnapshot.docs) {
-        await updateDoc(doc(db, "students", d.id), { status: "suspended" });
-        // También actualizar en user
-        const studentData = d.data();
-        if (studentData.parentUid) {
-          await updateDoc(doc(db, "users", studentData.parentUid), { status: "suspended" });
-        } else if (studentData.parentEmail) {
-          // Legacy compatibility
-          // TODO: eliminar cuando toda la base de datos tenga parentUid
-          await updateDoc(doc(db, "users", studentData.parentEmail.toLowerCase()), { status: "suspended" });
-        }
-      }
-      
-      setAlertSuccess(true);
-      setTimeout(() => setAlertSuccess(false), 3000);
-    } catch (err) {
-      console.error("Error auditing mora:", err);
-    } finally {
-      setSendingAlerts(false);
-    }
-  };
 
   // Confirmar pago manual para levantar suspensión (Directo desde lista)
   const handleConfirmManualPayment = async (studentIdOrName) => {
@@ -1536,28 +1505,32 @@ export default function AdminDashboard() {
           )}
 
           {/* TAB 3: MORA Y RECONCILIACIÓN MP */}
+{/* TAB 3: MORA Y RECONCILIACIÓN MP */}
           {activeTab === "billing" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4 font-sans">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Control de Mora y Recaudos</h2>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Control de suspensiones automáticas de QR al expirar el período de gracia (5 días hábiles).</p>
+                  <p className="text-slate-400 text-xs sm:text-sm mt-1">El sistema verificará las fechas de corte y suspenderá los usuarios con deudas mayores a 5 días.</p>
                 </div>
                 
                 <button
-                  onClick={triggerMoraAlerts}
-                  disabled={sendingAlerts}
-                  className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/10 cursor-pointer font-sans"
+                  onClick={processSuspensions}
+                  disabled={actionLoading}
+                  className="w-full sm:w-auto mt-4 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white font-display font-bold text-xs px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {sendingAlerts ? (
+                  {actionLoading ? (
                     <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
                       Procesando...
                     </>
                   ) : (
                     <>
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Auditar Mora & Enviar Avisos
+                      <AlertTriangle size={16} />
+                      Procesar Suspensión por Mora
                     </>
                   )}
                 </button>
