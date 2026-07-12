@@ -6,7 +6,9 @@ import Link from "next/link";
 import {
   ArrowRight,
   Calendar,
+  Check,
   CheckCircle,
+  ChartBar,
   Clock,
   Megaphone,
   ShieldCheck,
@@ -145,67 +147,126 @@ export default function Home() {
           </div>
         </section>
 
-        {/* PANELES DE LA LANDING CONVERTIDOS EN TRIGGERS INTERACTIVOS */}
-        <section className="border-t border-slate-900/80 bg-[#090d16]/30 px-6 py-14">
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-3">
+        {/* BENTO GRID PREMIUM */}
+        <section className="border-t border-slate-900/80 bg-[#07090e] px-6 py-16 sm:py-24 overflow-hidden">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <span className="inline-flex items-center rounded-full border border-[#10b981]/20 bg-[#10b981]/5 px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-[#10b981] mb-4">
+                Plataforma Integral
+              </span>
+              <h2 className="font-display text-3xl font-black uppercase tracking-tight text-slate-100 sm:text-4xl">
+                Tecnología al <span className="text-[#10b981]">Servicio del Deporte</span>
+              </h2>
+              <p className="mt-4 text-sm text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Una solución completa diseñada para maximizar el rendimiento deportivo, garantizar la transparencia financiera y optimizar la organización de Club Colombia.
+              </p>
+            </div>
             
-            {/* Panel 1: Control de Acceso */}
-            <button
-              onClick={() => setActiveChapter(1)}
-              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-[#10b981]/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#10b981]/50 group"
-            >
-              <ShieldCheck className="mb-4 h-7 w-7 text-[#10b981] group-hover:scale-105 transition-all" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
-                Control de Acceso
-                <span className="text-[8px] font-mono text-[#10b981] opacity-60 group-hover:opacity-100 transition-all font-black">
-                  VER TOUR
-                </span>
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-450">
-                Pase de lista en segundos, evaluación de salud en cancha y sincronización en tiempo real con el portal del padre.
-              </p>
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[300px]">
+              
+              {/* Tarjeta 1: Control de Acceso (Ocupa 2 columnas en md) */}
+              <div className="md:col-span-2 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-br from-[#0e121e]/80 to-[#07090e] p-8 transition-all duration-500 hover:border-[#10b981]/40 hover:shadow-[0_0_40px_rgba(16,185,129,0.1)]">
+                <div className="absolute inset-0 bg-[#10b981]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#10b981]/20 blur-[100px] rounded-full group-hover:bg-[#10b981]/30 transition-all duration-700" />
+                
+                <div className="relative z-10 flex flex-col h-full justify-between">
+                  <div>
+                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#10b981]/10 text-[#10b981] mb-5 border border-[#10b981]/20 group-hover:scale-110 transition-transform duration-500">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-display text-2xl font-black text-slate-100 uppercase tracking-wide">Control de Acceso Real</h3>
+                    <p className="mt-2 text-sm text-slate-400 max-w-sm leading-relaxed">Pase de lista inmediato desde la cancha mediante QRs únicos. Alertas médicas automatizadas y notificaciones instantáneas a la aplicación del padre.</p>
+                  </div>
+                  
+                  {/* UI Simulada - Player Card */}
+                  <div className="mt-6 flex items-center gap-4 bg-slate-950/90 p-4 rounded-2xl border border-slate-800/80 backdrop-blur-md w-max shadow-[0_20px_40px_rgba(0,0,0,0.5)] transform translate-y-6 group-hover:translate-y-0 opacity-80 group-hover:opacity-100 transition-all duration-500 ease-out">
+                    <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-[#10b981] flex items-center justify-center overflow-hidden shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                      <div className="w-7 h-7 rounded-full bg-slate-600 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-200">Ingreso Autorizado</div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">17:45 PM • Categoría 2010</div>
+                    </div>
+                    <div className="ml-6 w-8 h-8 rounded-full bg-[#10b981]/20 flex items-center justify-center text-[#10b981]">
+                      <Check className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-            {/* Panel 2: Seguimiento Deportivo */}
-            <button
-              onClick={() => {
-                setToastMessage("El Capítulo 2 (Seguimiento Deportivo) estará disponible tras completar su fase de integración.");
-                setTimeout(() => setToastMessage(""), 4000);
-              }}
-              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-amber-500/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500/50 group"
-            >
-              <CheckCircle className="mb-4 h-7 w-7 text-amber-500 group-hover:scale-105 transition-all" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
-                Seguimiento Deportivo
-                <span className="text-[8px] font-mono text-amber-500 opacity-0 group-hover:opacity-100 transition-all font-black">
-                  PRÓXIMAMENTE
-                </span>
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-450">
-                Evaluaciones técnicas, asistencia y comunicación entre entrenadores, acudientes y administración del club.
-              </p>
-            </button>
+              {/* Tarjeta 2: Seguimiento Deportivo */}
+              <div className="relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-bl from-[#0e121e]/80 to-[#07090e] p-8 transition-all duration-500 hover:border-amber-500/40 hover:shadow-[0_0_40px_rgba(245,158,11,0.1)]">
+                <div className="absolute inset-0 bg-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full group-hover:bg-amber-500/20 transition-all duration-700" />
+                
+                <div className="relative z-10 flex flex-col h-full justify-between">
+                  <div>
+                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-amber-500/10 text-amber-500 mb-5 border border-amber-500/20 group-hover:scale-110 transition-transform duration-500">
+                      <Trophy className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-display text-xl font-black text-slate-100 uppercase tracking-wide">Desarrollo Deportivo</h3>
+                    <p className="mt-2 text-xs text-slate-400 leading-relaxed">Rendimiento evaluado constantemente. Transparencia total en el progreso técnico.</p>
+                  </div>
+                  
+                  {/* UI Simulada - Radar Abstracto */}
+                  <div className="mt-4 flex justify-center opacity-60 group-hover:opacity-100 transform scale-95 group-hover:scale-105 transition-all duration-700">
+                    <svg width="110" height="110" viewBox="0 0 100 100" className="animate-[spin_20s_linear_infinite]">
+                      <polygon points="50,5 95,30 95,75 50,95 5,75 5,30" fill="none" stroke="#fbbf24" strokeWidth="0.5" strokeDasharray="2 4" className="opacity-30" />
+                      <polygon points="50,15 85,35 85,65 50,85 15,65 15,35" fill="none" stroke="#fbbf24" strokeWidth="1" className="opacity-40" />
+                      <polygon points="50,25 75,45 65,70 50,80 30,60 35,35" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" strokeWidth="1.5" className="filter drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" />
+                      <circle cx="50" cy="50" r="2" fill="#fbbf24" />
+                      <circle cx="50" cy="25" r="3" fill="#fbbf24" className="animate-pulse" />
+                      <circle cx="75" cy="45" r="2.5" fill="#fbbf24" />
+                      <circle cx="65" cy="70" r="3" fill="#fbbf24" />
+                      <circle cx="50" cy="80" r="2" fill="#fbbf24" />
+                      <circle cx="30" cy="60" r="2.5" fill="#fbbf24" />
+                      <circle cx="35" cy="35" r="2" fill="#fbbf24" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
 
-            {/* Panel 3: Gestión Administrativa */}
-            <button
-              onClick={() => {
-                setToastMessage("El Capítulo 3 (Gestión Administrativa) estará disponible tras completar su fase de integración.");
-                setTimeout(() => setToastMessage(""), 4000);
-              }}
-              className="rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 text-left transition-all hover:border-sky-500/40 hover:bg-[#0e121e]/90 cursor-pointer focus:outline-none focus:ring-1 focus:ring-sky-500/50 group"
-            >
-              <Users className="mb-4 h-7 w-7 text-sky-400 group-hover:scale-105 transition-all" />
-              <h2 className="font-display text-sm font-bold uppercase tracking-wide text-slate-200 flex items-center justify-between">
-                Gestión Administrativa
-                <span className="text-[8px] font-mono text-sky-400 opacity-0 group-hover:opacity-100 transition-all font-black">
-                  PRÓXIMAMENTE
-                </span>
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-450">
-                Inscripciones, pagos reportados, comunicados oficiales y organización de categorías desde una sola plataforma.
-              </p>
-            </button>
-
+              {/* Tarjeta 3: Gestión Administrativa (Ocupa 3 columnas) */}
+              <div className="md:col-span-3 relative group overflow-hidden rounded-[2rem] border border-slate-800/80 bg-gradient-to-tr from-[#0e121e]/80 to-[#07090e] p-8 sm:p-10 transition-all duration-500 hover:border-sky-500/40 hover:shadow-[0_0_40px_rgba(14,165,233,0.1)]">
+                <div className="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute right-1/4 -bottom-32 w-96 h-96 bg-sky-500/10 blur-[120px] rounded-full group-hover:bg-sky-500/20 transition-all duration-700" />
+                
+                <div className="relative z-10 flex flex-col md:flex-row items-center gap-10 h-full">
+                  <div className="flex-1 text-center md:text-left">
+                    <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-sky-500/10 text-sky-400 mb-5 border border-sky-500/20 group-hover:scale-110 transition-transform duration-500">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-display text-2xl font-black text-slate-100 uppercase tracking-wide">Gestión Centralizada</h3>
+                    <p className="mt-3 text-sm text-slate-400 max-w-lg mx-auto md:mx-0 leading-relaxed">
+                      Conecta a la directiva, el cuerpo técnico y las familias en un ecosistema unificado. Controla la tesorería, emite comunicados oficiales y organiza las categorías deportivas con procesos automatizados.
+                    </p>
+                  </div>
+                  
+                  {/* UI Simulada - Iconos Conectados */}
+                  <div className="flex-1 flex justify-center items-center w-full py-6">
+                    <div className="relative flex items-center justify-center gap-4 sm:gap-8 w-full max-w-sm">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-10 group-hover:-translate-y-2 group-hover:text-slate-300 group-hover:border-slate-700 transition-all duration-500">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      
+                      {/* Línea animada conectora */}
+                      <div className="absolute left-1/2 top-1/2 w-[70%] h-[1px] bg-gradient-to-r from-transparent via-sky-500/20 to-transparent -translate-x-1/2 -translate-y-1/2 overflow-hidden">
+                        <div className="w-1/2 h-full bg-gradient-to-r from-transparent via-sky-400 to-transparent animate-[translateX_2s_ease-in-out_infinite]" />
+                      </div>
+                      
+                      <div className="w-20 h-20 rounded-[1.75rem] bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-[0_0_30px_rgba(14,165,233,0.15)] z-20 group-hover:scale-110 group-hover:bg-sky-500/20 transition-all duration-500">
+                        <ShieldCheck className="w-10 h-10 drop-shadow-[0_0_10px_rgba(14,165,233,0.5)]" />
+                      </div>
+                      
+                      <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-10 group-hover:-translate-y-2 group-hover:text-slate-300 group-hover:border-slate-700 transition-all duration-500 delay-100">
+                        <ChartBar className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+            </div>
           </div>
         </section>
 
