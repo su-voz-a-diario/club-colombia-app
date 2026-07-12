@@ -58,43 +58,7 @@ export default function Home() {
     }
   ];
 
-  const platformScreenshots = [
-    {
-      title: "Inicio",
-      description: "Conoce la escuela y comienza el proceso de inscripción.",
-      imageSrc: "/screenshots/home.jpg"
-    },
-    {
-      title: "Registro del atleta",
-      description: "Completa la información del padre y del alumno para asignar automáticamente la categoría deportiva.",
-      imageSrc: "/screenshots/registration.jpg"
-    },
-    {
-      title: "Reporte de pago",
-      description: "Consulta la cuenta bancaria y registra tu depósito de forma sencilla.",
-      imageSrc: "/screenshots/payment.jpg"
-    },
-    {
-      title: "Validación del pago",
-      description: "El administrador verifica el depósito y activa automáticamente el acceso del atleta.",
-      imageSrc: "/screenshots/qr-pending.jpg"
-    },
-    {
-      title: "Portal del Padre",
-      description: "Consulta asistencia, calendario, pagos y credencial QR del atleta.",
-      imageSrc: "/screenshots/parent-dashboard.jpg"
-    },
-    {
-      title: "Portal del Entrenador",
-      description: "Controla asistencias, evaluaciones y seguimiento deportivo de cada alumno.",
-      imageSrc: "/screenshots/coach-dashboard.jpg"
-    },
-    {
-      title: "Portal del Administrador",
-      description: "Gestiona alumnos, pagos, categorías, entrenadores y toda la operación del club.",
-      imageSrc: "/screenshots/admin-dashboard.jpg"
-    }
-  ];
+
 
   return (
     <div className="flex min-h-screen flex-col bg-[#07090e] selection:bg-brand-green selection:text-white">
@@ -245,75 +209,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="border-t border-slate-900/80 bg-[#07090e] px-6 py-16 sm:py-20">
-          <div className="mx-auto max-w-6xl">
-            <div className="mx-auto mb-11 max-w-3xl text-center">
-              <span className="inline-flex items-center rounded-full border border-[#10b981]/20 bg-[#10b981]/5 px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.24em] text-[#10b981]">
-                Recorrido visual
-              </span>
-              <h2 className="mt-4 font-display text-3xl font-black uppercase tracking-wide text-slate-100 sm:text-4xl">
-                Así funciona Club Colombia
-              </h2>
-              <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
-                Un recorrido por la experiencia completa de la plataforma, desde el primer contacto hasta la operación diaria del club.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {platformScreenshots.map((item, index) => (
-                <article
-                  key={item.imageSrc}
-                  className="screenshot-reveal group flex h-full flex-col rounded-[1.75rem] border border-slate-800/80 bg-[#0e121e]/60 p-4 shadow-2xl shadow-black/10 transition-all duration-300 md:hover:-translate-y-1 md:hover:border-[#10b981]/30 md:hover:bg-[#0e121e]/90"
-                  style={{ animationDelay: `${index * 70}ms` }}
-                >
-                  <div className="relative mx-auto w-full max-w-[270px] rounded-[2.35rem] border border-slate-700/70 bg-slate-950 p-2.5 shadow-[0_26px_70px_rgba(0,0,0,0.38)] transition-transform duration-300 md:group-hover:scale-[1.015]">
-                    <div className="pointer-events-none absolute left-1/2 top-2.5 z-20 h-5 w-20 -translate-x-1/2 rounded-b-2xl bg-slate-950 shadow-sm" />
-                    <div className="pointer-events-none absolute inset-0 rounded-[2.35rem] ring-1 ring-white/5" />
-                    <div className="relative aspect-[9/16] overflow-hidden rounded-[1.8rem] border border-slate-800/90 bg-[#07090e]">
-                      {!missingScreenshots[item.imageSrc] ? (
-                        <Image
-                          src={item.imageSrc}
-                          alt={`Captura de ${item.title} en Club Colombia`}
-                          fill
-                          sizes="(max-width: 640px) 82vw, (max-width: 1024px) 42vw, (max-width: 1280px) 29vw, 250px"
-                          loading="lazy"
-                          className="object-cover"
-                          onError={() => {
-                            setMissingScreenshots(prev => ({
-                              ...prev,
-                              [item.imageSrc]: true
-                            }));
-                          }}
-                        />
-                      ) : (
-                        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                          <div className="mb-4 h-10 w-10 rounded-2xl border border-slate-800 bg-slate-900/70" />
-                          <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                            Captura disponible próximamente
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-1 flex-col text-left">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#10b981]/20 bg-[#10b981]/10 font-mono text-[10px] font-black text-[#10b981]">
-                        {index + 1}
-                      </span>
-                      <h3 className="font-display text-sm font-black uppercase tracking-wide text-slate-200">
-                        {item.title}
-                      </h3>
-                    </div>
-                    <p className="text-[12px] leading-relaxed text-slate-400">
-                      {item.description}
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
 
         <section className="px-6 py-12">
           <div className="mx-auto flex max-w-4xl flex-col items-start justify-between gap-5 rounded-2xl border border-slate-800/80 bg-[#0e121e]/60 p-6 sm:flex-row sm:items-center">
