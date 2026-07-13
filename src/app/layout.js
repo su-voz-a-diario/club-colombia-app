@@ -1,6 +1,7 @@
 import { Outfit, Inter } from "next/font/google";
 import "./globals.css";
 import { DemoProvider } from "@/context/DemoContext";
+import SplashScreen from "@/components/SplashScreen";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
       className={`${outfit.variable} ${inter.variable} h-full antialiased dark`}
     >
       <body className="min-h-full bg-[#07090e] text-[#ededed] font-sans flex flex-col">
+        <SplashScreen />
         <DemoProvider>
           {children}
         </DemoProvider>
