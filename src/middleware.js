@@ -16,13 +16,6 @@ export async function middleware(request) {
   const url = request.nextUrl.clone();
   const cookieName = getSessionCookieName();
   const sessionCookie = request.cookies.get(cookieName)?.value;
-  const masterKeyCookie = request.cookies.get("constructor_master_key")?.value;
-
-  // --- INICIO: MASTER KEY BYPASS ---
-  if (masterKeyCookie === "granted") {
-    return NextResponse.next();
-  }
-  // --- FIN: MASTER KEY BYPASS ---
 
   if (!sessionCookie) {
     return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));

@@ -21,10 +21,5 @@ export function isDemoActive() {
     }
   }
 
-  // C. Prioridad 3: Master Key (Bypass de producción)
-  if (typeof window !== "undefined" && localStorage.getItem("constructor_master_key") === "granted") {
-    return true;
-  }
-
   return false;
 }

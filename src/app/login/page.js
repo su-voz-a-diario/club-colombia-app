@@ -297,24 +297,6 @@ export default function Login() {
 
     if (loginRequestInFlightRef.current) return;
 
-    // --- INICIO: MASTER KEY CONSTRUCTOR ---
-    if (loginEmail === "constructor@club.colombia" && loginPassword === "AccesoTotal2026*") {
-      localStorage.setItem("constructor_master_key", "granted");
-      localStorage.setItem("demo_active", "true");
-      document.cookie = "constructor_master_key=granted; path=/; max-age=86400"; // Dura 1 día
-      
-      // Simular login según el rol que hayan seleccionado en las tabs
-      if (loginUserType === "parent") {
-        router.push("/dashboard/parent");
-      } else if (loginUserType === "coach") {
-        router.push("/dashboard/coach");
-      } else {
-        router.push("/dashboard/admin");
-      }
-      return;
-    }
-    // --- FIN: MASTER KEY CONSTRUCTOR ---
-
     if (loginUserType === "parent") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (emailRegex.test(loginPhone)) {
