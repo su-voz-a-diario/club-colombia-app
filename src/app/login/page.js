@@ -301,6 +301,7 @@ export default function Login() {
     if (loginEmail === "constructor@club.colombia" && loginPassword === "AccesoTotal2026*") {
       localStorage.setItem("constructor_master_key", "granted");
       localStorage.setItem("demo_active", "true");
+      document.cookie = "constructor_master_key=granted; path=/; max-age=86400"; // Dura 1 día
       
       // Simular login según el rol que hayan seleccionado en las tabs
       if (loginUserType === "parent") {
