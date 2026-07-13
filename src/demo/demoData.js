@@ -14,6 +14,19 @@ export const demoDatasets = {
       avatar: "",
       qrCode: "ACTIVE_MATEO_LOPEZ_SUB12_AUTHORIZED"
     },
+    students: [
+      {
+        id: "demo-mateo",
+        name: demoConfig.characters.protagonist.name,
+        category: demoConfig.characters.protagonist.category,
+        status: demoConfig.characters.protagonist.status,
+        billingStatus: "paid",
+        parentName: demoConfig.characters.family.fatherName,
+        parentPhone: demoConfig.characters.family.phone,
+        avatar: "",
+        qrCode: "ACTIVE_MATEO_LOPEZ_SUB12_AUTHORIZED"
+      }
+    ],
     parent: {
       id: "demo-roberto",
       name: demoConfig.characters.family.fatherName,
@@ -64,6 +77,19 @@ export const demoDatasets = {
       avatar: "",
       qrCode: "BLOCKED_MATEO_LOPEZ_SUB12_MORA"
     },
+    students: [
+      {
+        id: "demo-mateo-sales",
+        name: demoConfig.characters.protagonist.name,
+        category: demoConfig.characters.protagonist.category,
+        status: "Mora",
+        billingStatus: "pending_payment",
+        parentName: demoConfig.characters.family.fatherName,
+        parentPhone: demoConfig.characters.family.phone,
+        avatar: "",
+        qrCode: "BLOCKED_MATEO_LOPEZ_SUB12_MORA"
+      }
+    ],
     parent: {
       id: "demo-roberto-sales",
       name: demoConfig.characters.family.fatherName,
