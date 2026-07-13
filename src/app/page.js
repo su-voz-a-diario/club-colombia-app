@@ -90,15 +90,15 @@ export default function Home() {
             />
           </div>
 
-          <h1 className="z-10 max-w-4xl font-display text-5xl font-black leading-[1.05] tracking-tight text-slate-100 sm:text-7xl drop-shadow-xl uppercase">
-            Impulsa Tu Pasión <br />
-            <span className="bg-gradient-to-r from-emerald-400 via-sky-400 to-emerald-400 bg-clip-text text-transparent text-glow-emerald">
-              Únete a la Élite
+          <h1 className="z-10 max-w-4xl font-display text-4xl font-black leading-[1.1] tracking-tight text-slate-100 sm:text-6xl drop-shadow-xl">
+            Escuela de Fútbol <br />
+            <span className="bg-gradient-to-r from-[#10b981] via-[#34d399] to-[#d97706] bg-clip-text text-transparent text-glow-emerald">
+              Club Colombia
             </span>
           </h1>
 
-          <p className="z-10 mt-6 font-sans text-sm font-medium text-slate-300 max-w-2xl leading-relaxed">
-            Entrena, compite y conecta en la comunidad deportiva líder de Colombia. Accede a instalaciones, eventos y equipos de clase mundial.
+          <p className="z-10 mt-4 font-display text-xs font-bold uppercase tracking-widest text-[#10b981]">
+            Juntos somos más fuertes, juntos somos Colombia
           </p>
           <p className="z-10 mt-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             1 Corintios 1:10
@@ -114,16 +114,15 @@ export default function Home() {
           <div className="z-10 mt-10 flex w-full flex-col justify-center gap-5 sm:flex-row">
             <Link
               href="/login?tab=register"
-              className="cursor-pointer rounded-full bg-emerald-500 px-10 py-4 text-center font-display text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] transition-all hover:bg-emerald-400 scale-100 hover:scale-105"
+              className="cursor-pointer rounded-full glass-card-premium px-10 py-4 text-center font-display text-sm font-black text-emerald-400 border border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.2)] hover:shadow-[0_0_40px_rgba(16,185,129,0.5)] transition-all hover:bg-emerald-500/20 box-glow-emerald scale-100 hover:scale-105"
             >
-              UNIRSE AHORA
+              INSCRIPCIÓN EN LÍNEA
             </Link>
             <Link
               href="/login"
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-sky-500/50 bg-[#0e121e]/80 backdrop-blur-md px-10 py-4 text-center font-display text-sm font-bold text-sky-400 transition-all hover:bg-sky-500/10 box-glow-sky"
-              style={{ boxShadow: '0 0 20px rgba(14, 165, 233, 0.15)' }}
+              className="flex cursor-pointer items-center justify-center gap-2 rounded-full glass-card-premium border border-slate-700/50 px-10 py-4 text-center font-display text-sm font-bold text-slate-200 transition-all hover:bg-slate-800/60 shadow-[0_0_20px_rgba(255,255,255,0.05)] hover:shadow-[0_0_25px_rgba(255,255,255,0.1)]"
             >
-              EXPLORAR PORTAL
+              INGRESAR AL PORTAL
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
