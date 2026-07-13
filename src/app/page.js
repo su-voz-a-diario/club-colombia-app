@@ -63,8 +63,8 @@ export default function Home() {
 
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#07090e] selection:bg-brand-green selection:text-white">
-      <header className="sticky top-0 z-50 flex items-center justify-center border-b border-slate-900/60 px-6 py-3 glass-panel">
+    <div className="flex min-h-screen flex-col bg-[#07090e] selection:bg-emerald-500 selection:text-slate-900 relative overflow-hidden">
+      <header className="sticky top-0 z-50 flex items-center justify-center border-b border-slate-800/60 px-6 py-4 glass-card-premium shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <Link href="/" className="flex flex-col items-center text-center transition-all hover:opacity-90">
           <span className="font-display text-base font-black uppercase tracking-wide text-slate-100 sm:text-lg">
             Club <span className="text-[#10b981]">Colombia</span>
@@ -76,26 +76,29 @@ export default function Home() {
       </header>
 
       <main className="flex-1">
-        <section className="relative mx-auto flex max-w-5xl flex-col items-center overflow-hidden px-6 pb-12 pt-14 text-center sm:pt-16">
-          <div className="pointer-events-none absolute left-1/2 top-28 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-emerald-500/5 blur-[120px]" />
+        <section className="relative mx-auto flex max-w-5xl flex-col items-center overflow-hidden px-6 pb-12 pt-14 text-center sm:pt-20">
+          {/* Decorative Premium Glows */}
+          <div className="pointer-events-none absolute left-1/2 top-28 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-[150px]" />
+          <div className="pointer-events-none absolute left-1/4 top-10 h-[300px] w-[300px] -translate-x-1/2 rounded-full bg-sky-500/5 blur-[120px]" />
 
-          <div className="z-10 mb-6 flex justify-center">
+          <div className="z-10 mb-8 flex justify-center relative">
+            <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full" />
             <img
               src="/logo.png"
               alt="Escudo Club Colombia"
-              className="h-44 w-44 object-contain drop-shadow-[0_0_30px_rgba(16,185,129,0.3)] sm:h-56 sm:w-56"
+              className="h-44 w-44 object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.4)] sm:h-56 sm:w-56 animate-float relative z-10"
             />
           </div>
 
-          <h1 className="z-10 max-w-4xl font-display text-4xl font-black leading-[1.1] tracking-tight text-slate-100 sm:text-6xl">
-            Escuela de Fútbol <br />
-            <span className="bg-gradient-to-r from-[#10b981] via-[#34d399] to-[#d97706] bg-clip-text text-transparent">
-              Club Colombia
+          <h1 className="z-10 max-w-4xl font-display text-5xl font-black leading-[1.05] tracking-tight text-slate-100 sm:text-7xl drop-shadow-xl uppercase">
+            Impulsa Tu Pasión <br />
+            <span className="bg-gradient-to-r from-emerald-400 via-sky-400 to-emerald-400 bg-clip-text text-transparent text-glow-emerald">
+              Únete a la Élite
             </span>
           </h1>
 
-          <p className="z-10 mt-4 font-display text-xs font-bold uppercase tracking-widest text-[#10b981]">
-            Juntos somos más fuertes, juntos somos Colombia
+          <p className="z-10 mt-6 font-sans text-sm font-medium text-slate-300 max-w-2xl leading-relaxed">
+            Entrena, compite y conecta en la comunidad deportiva líder de Colombia. Accede a instalaciones, eventos y equipos de clase mundial.
           </p>
           <p className="z-10 mt-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             1 Corintios 1:10
@@ -108,39 +111,40 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="z-10 mt-8 flex w-full flex-col justify-center gap-4 sm:flex-row">
+          <div className="z-10 mt-10 flex w-full flex-col justify-center gap-5 sm:flex-row">
             <Link
               href="/login?tab=register"
-              className="cursor-pointer rounded-full bg-[#10b981] px-8 py-3.5 text-center font-display text-sm font-black text-slate-950 shadow-xl shadow-emerald-500/10 transition-all hover:bg-[#059669]"
+              className="cursor-pointer rounded-full bg-emerald-500 px-10 py-4 text-center font-display text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] transition-all hover:bg-emerald-400 scale-100 hover:scale-105"
             >
-              Inscripción en Línea
+              UNIRSE AHORA
             </Link>
             <Link
               href="/login"
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-8 py-3.5 text-center font-display text-sm font-bold text-slate-200 transition-all hover:bg-slate-900/90"
+              className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-sky-500/50 bg-[#0e121e]/80 backdrop-blur-md px-10 py-4 text-center font-display text-sm font-bold text-sky-400 transition-all hover:bg-sky-500/10 box-glow-sky"
+              style={{ boxShadow: '0 0 20px rgba(14, 165, 233, 0.15)' }}
             >
-              Ingresar al Portal
+              EXPLORAR PORTAL
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-4xl px-6 pb-12">
-          <div className="flex gap-4 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-500">
-              <Megaphone className="h-5 w-5" />
+        <section className="mx-auto w-full max-w-3xl px-6 pb-16 relative z-10">
+          <div className="flex gap-5 rounded-3xl border border-amber-500/20 glass-card-premium p-5 items-start sm:items-center flex-col sm:flex-row hover:border-amber-500/40 transition-colors">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-500 box-glow-amber">
+              <Megaphone className="h-6 w-6 animate-pulse" />
             </div>
-            <div className="space-y-1 text-left">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-amber-500">
-                  Comunicado Oficial del Club
+            <div className="space-y-1.5 text-left flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-amber-500 text-glow-amber">
+                  Comunicado Oficial
                 </span>
-                <span className="flex items-center gap-1 font-mono text-[9px] text-slate-500">
-                  <Calendar className="h-3 w-3" />
+                <span className="flex items-center gap-1 font-mono text-[10px] text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded-md">
+                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
                   {announcement.date}
                 </span>
               </div>
-              <p className="font-sans text-xs leading-relaxed text-slate-300">
+              <p className="font-sans text-sm leading-relaxed text-slate-200 font-medium">
                 {announcement.text}
               </p>
             </div>

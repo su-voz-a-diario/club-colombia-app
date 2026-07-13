@@ -87,6 +87,10 @@ body {
   box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
+.box-glow-sky {
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
+}
+
 /* Checkbox estilizado tipo switch para asistencias (opcional, si usamos inputs nativos) */
 .premium-checkbox:checked {
   background-color: var(--color-brand-green);
