@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
 import { useCoach, useCalendar } from "@/hooks";
+import RadarPerformance from "@/components/RadarPerformance";
 
 export default function CoachDashboard() {
   const [attendance, setAttendance] = useState([]);
@@ -154,66 +155,68 @@ export default function CoachDashboard() {
         </div>
       </header>
 
-      {/* Portal Welcome Section */}
-      <div className="px-4 pt-6 pb-2 text-center flex flex-col items-center border-b border-slate-900/40 bg-[#090d16]/10">
+      {/* Portal Welcome Section Premium */}
+      <div className="px-4 pt-8 pb-6 text-center flex flex-col items-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#10b981]/10 to-transparent pointer-events-none" />
         <img 
           src="/logo.png" 
           alt="Escudo Club Colombia" 
-          className="w-16 h-16 object-contain mb-2 filter drop-shadow-[0_0_12px_rgba(16,185,129,0.15)] animate-pulse-subtle" 
+          className="w-20 h-20 object-contain mb-3 filter drop-shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-float" 
         />
-        <h2 className="font-display font-black text-sm text-slate-100 uppercase tracking-wider">
+        <h2 className="font-display font-black text-lg text-slate-100 uppercase tracking-wider text-glow-emerald">
           Portal del Entrenador
         </h2>
-        <p className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">
-          Club Colombia • Sin información disponible
+        <p className="text-[10px] font-mono text-emerald-500/80 uppercase tracking-widest mt-1">
+          Control Deportivo y Estadístico
         </p>
       </div>
 
       {/* Selector de módulos en cabecera */}
-      <div className="px-4 pt-4 pb-2 grid grid-cols-2 gap-2 bg-[#090d16]/30">
+      <div className="px-4 pt-2 pb-4 grid grid-cols-2 gap-3 relative z-10">
         <button
           onClick={() => setActiveTab("attendance")}
-          className={`py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-            activeTab === "attendance" ? "bg-slate-800 text-[#10b981] border border-slate-700/50" : "bg-[#0e121e] text-slate-400"
+          className={`py-3 rounded-2xl text-xs font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            activeTab === "attendance" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 box-glow-emerald" : "bg-[#0e121e]/80 backdrop-blur-md text-slate-400 border border-slate-800"
           }`}
         >
-          <ClipboardList className="w-4 h-4" />
-          Toma de Asistencia
+          <ClipboardList className={`w-4 h-4 ${activeTab === "attendance" ? "animate-pulse" : ""}`} />
+          Asistencia
         </button>
         <button
           onClick={() => setActiveTab("evaluation")}
-          className={`py-2.5 rounded-xl text-xs font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-            activeTab === "evaluation" ? "bg-slate-800 text-amber-500 border border-slate-700/50" : "bg-[#0e121e] text-slate-400"
+          className={`py-3 rounded-2xl text-xs font-bold font-display transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            activeTab === "evaluation" ? "bg-amber-500/20 text-amber-500 border border-amber-500/50 box-glow-amber" : "bg-[#0e121e]/80 backdrop-blur-md text-slate-400 border border-slate-800"
           }`}
         >
-          <TrendingUp className="w-4 h-4" />
-          Ficha de Evaluación
+          <TrendingUp className={`w-4 h-4 ${activeTab === "evaluation" ? "animate-pulse" : ""}`} />
+          Evaluación 3D
         </button>
       </div>
 
       {/* Cuerpo principal */}
       <div className="flex-1 px-4 py-4 space-y-4 overflow-y-auto">
 
-        {/* TAB 1: ASISTENCIA TÁCTIL RÁPIDA */}
+        {/* TAB 1: ASISTENCIA TÁCTIL RÁPIDA PREMIUM */}
         {activeTab === "attendance" && (
-          <div className="bg-[#0e121e] border border-slate-900 p-4 rounded-2xl space-y-4">
+          <div className="glass-card-premium p-5 rounded-3xl space-y-5">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-slate-300">Asistencia de Hoy</h3>
-                <p className="text-[9px] text-slate-500 font-mono mt-0.5">{new Date().toLocaleDateString("es-CO", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <h3 className="font-display font-black text-sm uppercase tracking-widest text-emerald-400">Control de Accesos</h3>
+                <p className="text-[10px] text-slate-400 font-mono mt-1 uppercase">{new Date().toLocaleDateString("es-CO", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
               </div>
             </div>
 
-            {/* Siguiente Evento y RSVP */}
+            {/* Siguiente Evento y RSVP Premium */}
             {nextEvent && (
-              <div className="bg-[#07090e]/60 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between text-xs">
-                <div className="min-w-0 flex-1 pr-2">
-                  <span className="text-[8px] text-[#10b981] font-bold uppercase tracking-wider block">Próximo Evento (RSVP)</span>
-                  <span className="font-bold text-slate-200 block truncate">{nextEvent.title}</span>
-                  <span className="text-[8px] text-slate-500 font-mono mt-0.5 block">{nextEvent.date} • {nextEvent.time}</span>
+              <div className="glass-item-premium p-4 rounded-2xl flex items-center justify-between text-xs relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+                <div className="min-w-0 flex-1 pr-4 relative z-10">
+                  <span className="text-[9px] text-emerald-400 font-black uppercase tracking-widest block mb-1">Próximo Evento (RSVP)</span>
+                  <span className="font-bold text-slate-100 block truncate text-base">{nextEvent.title}</span>
+                  <span className="text-[9px] text-slate-400 font-mono mt-1 block">{nextEvent.date} • {nextEvent.time}</span>
                 </div>
-                <div className="bg-[#10b981]/15 border border-[#10b981]/25 text-[#10b981] font-bold px-3 py-1.5 rounded-xl text-center shrink-0">
-                  <span className="block text-[13px] font-black leading-none">
+                <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold px-4 py-2 rounded-2xl text-center shrink-0 relative z-10 box-glow-emerald">
+                  <span className="block text-xl font-black leading-none drop-shadow-md">
                     {nextEvent.rsvps ? Object.values(nextEvent.rsvps).filter(v => v === "confirmed").length : 0}
                   </span>
                   <span className="text-[6px] uppercase tracking-wider block mt-0.5 leading-none">Confirmados</span>
@@ -228,41 +231,41 @@ export default function CoachDashboard() {
               </div>
             )}
 
-            <div className="divide-y divide-slate-800/60">
+            <div className="space-y-2 mt-2">
               {attendance.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-500 font-sans">
+                <div className="py-8 text-center text-xs text-slate-500 font-sans glass-item-premium rounded-2xl">
                   Aún no hay registros
                 </div>
               ) : attendance.map((athlete) => (
-                <div key={athlete.id} className="py-3 flex items-center justify-between gap-4">
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-xs font-bold text-slate-300 truncate">{athlete.name}</span>
-                    <div className="flex items-center gap-1">
+                <div key={athlete.id} className="p-3 flex items-center justify-between gap-4 glass-item-premium rounded-2xl transition-all hover:bg-slate-800/40">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-sm font-bold text-slate-200 truncate">{athlete.name}</span>
+                    <div className="flex items-center gap-1.5">
                       {athlete.healthStatus === "injured" && (
-                        <span className="text-[7px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
-                          <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" /> Lesionado
+                        <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse box-glow-emerald" style={{boxShadow: '0 0 8px red'}} /> Lesionado
                         </span>
                       )}
                       {athlete.healthStatus === "fatigue" && (
-                        <span className="text-[7px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
-                          <span className="w-1 h-1 bg-amber-500 rounded-full" /> Fatiga
+                        <span className="text-[8px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full box-glow-amber" /> Fatiga
                         </span>
                       )}
                       {athlete.healthStatus === "optimal" && (
-                        <span className="text-[7px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-bold inline-flex items-center gap-0.5 leading-none">
-                          <span className="w-1 h-1 bg-emerald-500 rounded-full" /> Óptimo
+                        <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full box-glow-emerald" /> Óptimo
                         </span>
                       )}
                     </div>
                   </div>
                   
-                  {/* Selector Táctil */}
-                  <div className="flex items-center gap-1 bg-[#07090e] p-1 rounded-lg border border-slate-900 shrink-0">
+                  {/* Selector Táctil Premium */}
+                  <div className="flex items-center gap-1.5 bg-[#07090e]/50 p-1.5 rounded-xl border border-slate-800/50 shrink-0">
                     <button
                       type="button"
                       onClick={() => handleAttendanceClick(athlete, "P")}
-                      className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
-                        athlete.status === "P" ? "bg-emerald-500 text-slate-950 shadow" : "text-emerald-500 hover:bg-emerald-500/10"
+                      className={`w-9 h-9 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        athlete.status === "P" ? "bg-emerald-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110" : "text-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-400"
                       }`}
                     >
                       P
@@ -270,8 +273,8 @@ export default function CoachDashboard() {
                     <button
                       type="button"
                       onClick={() => handleAttendanceClick(athlete, "A")}
-                      className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
-                        athlete.status === "A" ? "bg-red-500 text-slate-950 shadow" : "text-red-500 hover:bg-red-500/10"
+                      className={`w-9 h-9 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        athlete.status === "A" ? "bg-red-500 text-slate-950 shadow-[0_0_15px_rgba(239,68,68,0.5)] scale-110" : "text-red-500/50 hover:bg-red-500/10 hover:text-red-400"
                       }`}
                     >
                       A
@@ -279,8 +282,8 @@ export default function CoachDashboard() {
                     <button
                       type="button"
                       onClick={() => handleAttendanceClick(athlete, "J")}
-                      className={`w-7 h-7 rounded text-[10px] font-black transition-all cursor-pointer ${
-                        athlete.status === "J" ? "bg-amber-500 text-slate-950 shadow" : "text-amber-500 hover:bg-amber-500/10"
+                      className={`w-9 h-9 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        athlete.status === "J" ? "bg-amber-500 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-110" : "text-amber-500/50 hover:bg-amber-500/10 hover:text-amber-400"
                       }`}
                     >
                       J
@@ -292,42 +295,42 @@ export default function CoachDashboard() {
 
             <button
               onClick={saveAttendance}
-              className="w-full bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all cursor-pointer"
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 text-slate-950 font-display font-black text-sm py-4 rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] cursor-pointer mt-4"
             >
               Guardar Reporte de Asistencia
             </button>
           </div>
         )}
 
-        {/* TAB 2: EVALUACIÓN TÉCNICA */}
+        {/* TAB 2: EVALUACIÓN TÉCNICA 3D PREMIUM */}
         {activeTab === "evaluation" && (
-          <form onSubmit={saveEvaluation} className="bg-[#0e121e] border border-slate-900 p-4 rounded-2xl space-y-4">
+          <form onSubmit={saveEvaluation} className="glass-card-premium p-5 rounded-3xl space-y-5">
             <div>
-              <h3 className="font-display font-bold text-xs uppercase tracking-wider text-slate-300">Calificación del Trimestre</h3>
-              <p className="text-[9px] text-slate-500 mt-0.5">Define las habilidades individuales del atleta para el informe de rendimiento.</p>
+              <h3 className="font-display font-black text-sm uppercase tracking-widest text-amber-500">Evaluación de Rendimiento</h3>
+              <p className="text-[10px] text-slate-400 font-mono mt-1 uppercase">Métricas Trimestrales</p>
             </div>
 
             {evaluationSaved && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 text-[#10b981] p-3 rounded-xl text-[10px] flex items-center gap-1.5 animate-fade-in">
-                <Check className="w-4 h-4" />
-                Informe técnico enviado y notificado al representante.
+              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-3 rounded-2xl text-xs flex items-center gap-2 animate-fade-in box-glow-amber">
+                <Check className="w-5 h-5" />
+                Informe técnico enviado al sistema central.
               </div>
             )}
 
             {evaluationError && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[10px] flex items-center gap-1.5 animate-fade-in">
-                <AlertCircle className="w-4 h-4" />
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-2xl text-xs flex items-center gap-2 animate-fade-in">
+                <AlertCircle className="w-5 h-5" />
                 {evaluationError}
               </div>
             )}
 
-            {/* Selector de alumno */}
-            <div>
-              <label className="text-[8px] text-slate-400 font-bold block mb-1">ATLETA A EVALUAR</label>
+            {/* Selector de alumno Premium */}
+            <div className="glass-item-premium p-4 rounded-2xl">
+              <label className="text-[9px] text-amber-500 font-black block mb-2 uppercase tracking-widest text-glow-amber">ATLETA A EVALUAR</label>
               <select
                 value={selectedStudent}
                 onChange={(e) => setSelectedStudent(e.target.value)}
-                className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-green"
+                className="w-full bg-[#07090e]/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 appearance-none transition-all"
               >
                 <option value="">-- Seleccionar Atleta --</option>
                 {operationalStudents.length === 0 && (
@@ -339,14 +342,14 @@ export default function CoachDashboard() {
               </select>
             </div>
 
-            {/* Selector de Estado Físico */}
+            {/* Selector de Estado Físico Premium */}
             {selectedStudent && (
-              <div className="animate-fade-in">
-                <label className="text-[8px] text-slate-400 font-bold block mb-1">ESTADO FÍSICO / SALUD</label>
+              <div className="animate-fade-in glass-item-premium p-4 rounded-2xl">
+                <label className="text-[9px] text-amber-500 font-black block mb-2 uppercase tracking-widest text-glow-amber">ESTADO FÍSICO / SALUD</label>
                 <select
                   value={healthStatus}
                   onChange={(e) => setHealthStatus(e.target.value)}
-                  className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-250 focus:outline-none focus:border-brand-green"
+                  className="w-full bg-[#07090e]/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 appearance-none transition-all"
                 >
                   <option value="optimal">🟢 Óptimo (Listo para entrenar)</option>
                   <option value="fatigue">🟡 Fatiga / Carga moderada (Precaución)</option>
@@ -355,101 +358,108 @@ export default function CoachDashboard() {
               </div>
             )}
 
-            {/* Sliders de Habilidades */}
-            <div className="space-y-3 pt-2">
+            {/* Sliders de Habilidades Premium */}
+            <div className="space-y-4 pt-4">
               {/* Velocidad */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Velocidad</span>
-                  <span className="text-[#10b981] font-mono">{speed}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{speed}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
 
               {/* Pase */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Pase</span>
-                  <span className="text-[#10b981] font-mono">{passing}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{passing}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={passing} onChange={(e) => setPassing(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
 
               {/* Regate */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Regate</span>
-                  <span className="text-[#10b981] font-mono">{dribbling}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{dribbling}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={dribbling} onChange={(e) => setDribbling(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
 
               {/* Tiro */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Tiro</span>
-                  <span className="text-[#10b981] font-mono">{shooting}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{shooting}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={shooting} onChange={(e) => setShooting(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
 
               {/* Fisico */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Físico</span>
-                  <span className="text-[#10b981] font-mono">{physical}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{physical}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={physical} onChange={(e) => setPhysical(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
 
               {/* Disciplina */}
-              <div>
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase">
+              <div className="glass-item-premium p-3 rounded-2xl">
+                <div className="flex justify-between items-center text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 px-1">
                   <span>Disciplina</span>
-                  <span className="text-[#10b981] font-mono">{discipline}/10</span>
+                  <span className="text-amber-400 font-mono text-glow-amber text-xs">{discipline}/10</span>
                 </div>
                 <input
                   type="range" min="1" max="10" value={discipline} onChange={(e) => setDiscipline(Number(e.target.value))}
-                  className="w-full h-1 bg-[#07090e] rounded-lg appearance-none cursor-pointer accent-[#10b981] mt-1"
+                  className="premium-slider"
                 />
               </div>
             </div>
 
-            {/* Notas tácticas */}
-            <div className="space-y-1.5 pt-2">
-              <div className="flex justify-between items-center">
-                <label className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">OBSERVACIONES TÁCTICAS</label>
-              </div>
+            {/* Preview del Radar 3D (Se muestra en tiempo real) */}
+            <div className="flex flex-col items-center justify-center pt-2">
+              <span className="text-[10px] text-amber-500/70 font-mono uppercase tracking-widest mb-2">Vista Previa del Rendimiento</span>
+              <RadarPerformance 
+                metrics={{
+                  speed, passing, dribbling, shooting, physical, discipline
+                }}
+              />
+            </div>
+            
+            {/* Notas tácticas Premium */}
+            <div className="space-y-2 pt-2">
+              <label className="text-[9px] text-amber-500 font-black uppercase tracking-widest text-glow-amber block">OBSERVACIONES TÁCTICAS</label>
               <textarea
                 rows={3}
-                placeholder="Escribe comentarios sobre posicionamiento, disciplina o metas de entrenamiento..."
+                placeholder="Escribe comentarios sobre posicionamiento, disciplina..."
                 value={tacticalNotes}
                 onChange={(e) => setTacticalNotes(e.target.value)}
-                className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green resize-none leading-relaxed"
+                className="w-full bg-[#07090e]/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 resize-none leading-relaxed transition-all"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs py-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              className="w-full bg-gradient-to-r from-amber-600 to-amber-400 hover:from-amber-500 hover:to-amber-300 text-slate-950 font-display font-black text-sm py-4 rounded-2xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] cursor-pointer mt-4"
             >
-              <Send className="w-3.5 h-3.5" />
-              Publicar Informe Técnico
+              Guardar Reporte y Generar Radar 3D
             </button>
           </form>
         )}

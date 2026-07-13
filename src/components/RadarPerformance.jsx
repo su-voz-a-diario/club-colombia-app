@@ -53,16 +53,20 @@ export default function RadarPerformance({ metrics = { speed: 8, passing: 7, dri
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-2 bg-[#0e121e]/50 border border-slate-800/60 rounded-2xl">
-      <svg width={size} height={size} className="w-full max-w-[280px]">
+    <div className="flex flex-col items-center justify-center p-4 glass-card-premium rounded-3xl relative overflow-hidden group">
+      {/* Decorative Glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      
+      <svg width={size} height={size} className="w-full max-w-[280px] drop-shadow-[0_0_15px_rgba(245,158,11,0.2)] animate-spin-slow">
         {/* Rejillas de fondo */}
         {gridPoints.map((points, idx) => (
           <polygon
             key={idx}
             points={points}
             fill="none"
-            stroke="rgba(148, 163, 184, 0.12)"
+            stroke="rgba(245, 158, 11, 0.15)"
             strokeWidth="1"
+            strokeDasharray="2, 2"
           />
         ))}
 
@@ -78,7 +82,7 @@ export default function RadarPerformance({ metrics = { speed: 8, passing: 7, dri
               y1={center}
               x2={x}
               y2={y}
-              stroke="rgba(148, 163, 184, 0.2)"
+              stroke="rgba(245, 158, 11, 0.2)"
               strokeWidth="1"
             />
           );
@@ -87,11 +91,19 @@ export default function RadarPerformance({ metrics = { speed: 8, passing: 7, dri
         {/* Polígono de Rendimiento */}
         <polygon
           points={getPoints(metrics)}
-          fill="rgba(16, 185, 129, 0.18)"
-          stroke="#10b981"
-          strokeWidth="2.5"
-          className="transition-all duration-500 ease-out"
+          fill="url(#goldGradient)"
+          stroke="#f59e0b"
+          strokeWidth="3"
+          className="transition-all duration-1000 ease-out"
         />
+
+        {/* Definición de Gradiente para el Polígono */}
+        <defs>
+          <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgba(245, 158, 11, 0.4)" />
+            <stop offset="100%" stopColor="rgba(217, 119, 6, 0.1)" />
+          </linearGradient>
+        </defs>
 
         {/* Puntos / Marcadores */}
         {categories.map((cat, i) => {
@@ -105,27 +117,31 @@ export default function RadarPerformance({ metrics = { speed: 8, passing: 7, dri
               cx={cx}
               cy={cy}
               r="4.5"
-              fill="#d97706"
-              stroke="#07090e"
+              fill="#fbbf24"
+              stroke="#0f172a"
               strokeWidth="1.5"
+              className="transition-all duration-1000 ease-out"
+              style={{ filter: "drop-shadow(0 0 4px rgba(251,191,36,0.8))" }}
             />
           );
         })}
 
-        {/* Textos de Categoría */}
+        {/* Etiquetas - Corregimos la rotación para que el texto sea legible pese al grid que rota */}
         {categories.map((cat, i) => {
           const { x, y, textAnchor } = getLabelCoords(i);
-          const val = metrics[cat.key] || 0;
           return (
             <text
               key={i}
               x={x}
               y={y}
               textAnchor={textAnchor}
-              className="text-[11px] font-sans font-semibold fill-slate-300"
-              dominantBaseline="middle"
+              alignmentBaseline="middle"
+              className="text-[9px] font-black uppercase tracking-widest"
+              fill="#94a3b8"
+              // Invertimos la rotación lenta localmente
+              style={{ animation: "spin-slow 20s linear infinite reverse", transformOrigin: `${x}px ${y}px` }}
             >
-              {cat.label} <tspan fill="#10b981">{val}</tspan>
+              {cat.label}
             </text>
           );
         })}
