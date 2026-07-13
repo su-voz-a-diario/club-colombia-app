@@ -45,6 +45,11 @@ export function DemoProvider({ children }) {
       }
     }
 
+    // C. Prioridad 3: Master Key (Bypass de producción)
+    if (typeof window !== "undefined" && localStorage.getItem("constructor_master_key") === "granted") {
+      active = true;
+    }
+
     // 2. Si está activo, validar el entorno estructural antes de inicializar
     if (active) {
       const validation = validateDemoEnvironment();
