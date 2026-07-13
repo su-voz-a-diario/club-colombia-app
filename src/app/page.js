@@ -126,6 +126,17 @@ export default function Home() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
+
+          {/* Hero Graphic */}
+          <div className="z-10 mt-16 w-full max-w-lg mx-auto relative animate-float">
+            <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full" />
+            <img 
+              src="/hero_graphic.jpg" 
+              alt="Club Colombia Hero Graphic" 
+              className="w-full h-auto rounded-3xl object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.3)] border border-slate-800/60 relative z-10"
+              style={{ maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)' }}
+            />
+          </div>
         </section>
 
         <section className="mx-auto w-full max-w-3xl px-6 pb-16 relative z-10">
