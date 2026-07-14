@@ -9,8 +9,47 @@ import { categoryNameToId, normalizeStudentName, calculateLeaderboard } from "@/
 import { normalizeAndValidatePhone } from "@/lib/phone";
 import { collection, doc, onSnapshot, updateDoc, getDoc, query, where, getDocs, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { useAdminStudents, useAdminEvaluations, useAdminAttendance, useAdminEvents, useAdminAnnouncements, useAdminDrills, useAdminPhones, useAdminPayments } from "@/hooks";
+import { adminRenderBlock, adminStep, getAdminDiagnosticsSnapshot } from "@/lib/adminDiagnostics";
+
+class AdminInstrumentationBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    adminStep("ADMIN_STEP_98_ERROR_BOUNDARY_CAUGHT", {
+      type: "error_boundary",
+      message: error?.message || "",
+      stack: error?.stack || "",
+      componentStack: errorInfo?.componentStack || "",
+      snapshot: getAdminDiagnosticsSnapshot()
+    });
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-[#07090e] flex items-center justify-center p-6 text-center">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-300 rounded-2xl p-5 max-w-md">
+            <h1 className="font-display font-black text-sm uppercase tracking-wider">Error al cargar administración</h1>
+            <p className="text-xs text-red-200/80 mt-2">El error fue registrado en consola con la marca ADMIN_STEP_98.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function AdminDashboard() {
+  adminStep("ADMIN_STEP_01_COMPONENT_RENDER_START");
+
   const formatCurrency = (val) => {
     return new Intl.NumberFormat("es-MX", {
       style: "currency",
@@ -52,13 +91,24 @@ export default function AdminDashboard() {
   };
 
   // Datos consumidos desde capa de servicios
+  adminStep("ADMIN_STEP_02_BEFORE_USE_ADMIN_STUDENTS");
   const { data: students, loading: studentsLoading, error: studentsError, manualRegisterStudent, applyCategoryOverride, confirmManualPayment } = useAdminStudents();
   
+  adminStep("ADMIN_STEP_03_BEFORE_ACTIVE_STUDENTS_MEMO", {
+    studentsCount: Array.isArray(students) ? students.length : "not-array"
+  });
   const activeStudentsCount = React.useMemo(() => {
+    adminStep("ADMIN_STEP_04_ACTIVE_STUDENTS_MEMO_RUN", {
+      studentsCount: Array.isArray(students) ? students.length : "not-array"
+    });
     return (students || []).filter(s => s.status === "active").length;
   }, [students]);
 
+  adminStep("ADMIN_STEP_05_BEFORE_DELINQUENT_MEMO");
   const delinquentStudentsCount = React.useMemo(() => {
+    adminStep("ADMIN_STEP_06_DELINQUENT_MEMO_RUN", {
+      studentsCount: Array.isArray(students) ? students.length : "not-array"
+    });
     return (students || []).filter(s => s.status === "active" && Number(s.dueDays || 0) > 5).length;
   }, [students]);
 
@@ -92,6 +142,7 @@ export default function AdminDashboard() {
   const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly"); // "monthly" | "class"
 
   // Hook centralizado para pagos pendientes y validaciones
+  adminStep("ADMIN_STEP_07_BEFORE_USE_ADMIN_PAYMENTS");
   const { 
     pendingPayments, 
     approvePayment, 
@@ -137,13 +188,19 @@ export default function AdminDashboard() {
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [selectedParentStudent, setSelectedParentStudent] = useState(null);
   const [newParentPhone, setNewParentPhone] = useState("");
+  adminStep("ADMIN_STEP_08_BEFORE_USE_ADMIN_PHONES");
   const { updatePhone, loading: phoneUpdating, error: phoneError, successMessage: phoneSuccess, clearState: clearPhoneState } = useAdminPhones();
 
   // Leaderboard lists
+  adminStep("ADMIN_STEP_09_BEFORE_USE_ADMIN_EVALUATIONS");
   const { data: evaluations } = useAdminEvaluations();
+  adminStep("ADMIN_STEP_10_BEFORE_USE_ADMIN_ATTENDANCE");
   const { data: allAttendance } = useAdminAttendance();
+  adminStep("ADMIN_STEP_11_BEFORE_USE_ADMIN_EVENTS");
   const { events, createEvent, deleteEvent } = useAdminEvents();
+  adminStep("ADMIN_STEP_12_BEFORE_USE_ADMIN_ANNOUNCEMENTS");
   const { sendAnnouncement } = useAdminAnnouncements();
+  adminStep("ADMIN_STEP_13_BEFORE_USE_ADMIN_DRILLS");
   const { drills, saveDrill, deleteDrill } = useAdminDrills();
 
   const handleCreateEvent = async (e) => {
@@ -474,13 +531,80 @@ export default function AdminDashboard() {
     }
   };
 
+  adminStep("ADMIN_STEP_14_BEFORE_LEADERBOARD_MEMO", {
+    studentsCount: Array.isArray(students) ? students.length : "not-array",
+    evaluationsCount: Array.isArray(evaluations) ? evaluations.length : "not-array",
+    attendanceCount: Array.isArray(allAttendance) ? allAttendance.length : "not-array"
+  });
   const memoizedLeaderboard = React.useMemo(() => {
+    adminStep("ADMIN_STEP_15_LEADERBOARD_MEMO_RUN", {
+      studentsCount: Array.isArray(students) ? students.length : "not-array",
+      evaluationsCount: Array.isArray(evaluations) ? evaluations.length : "not-array",
+      attendanceCount: Array.isArray(allAttendance) ? allAttendance.length : "not-array"
+    });
     return calculateLeaderboard(students, evaluations, allAttendance);
   }, [students, evaluations, allAttendance]);
 
 
+  adminStep("ADMIN_STEP_16_BEFORE_ADMIN_GLOBAL_EFFECT");
   useEffect(() => {
-    // La suscripción a pagos ahora se maneja dentro del hook useAdminPayments
+    adminStep("ADMIN_STEP_17_ADMIN_GLOBAL_EFFECT_ENTER", {
+      activeTab,
+      studentsCount: Array.isArray(students) ? students.length : "not-array",
+      pendingPaymentsCount: Array.isArray(pendingPayments) ? pendingPayments.length : "not-array",
+      leaderboardCount: Array.isArray(memoizedLeaderboard) ? memoizedLeaderboard.length : "not-array"
+    });
+
+    const previousOnError = window.onerror;
+    const previousOnUnhandledRejection = window.onunhandledrejection;
+
+    window.onerror = (message, source, lineno, colno, error) => {
+      adminStep("ADMIN_STEP_99_WINDOW_ONERROR", {
+        type: "window_error",
+        message: String(message || ""),
+        source: source || "",
+        lineno,
+        colno,
+        stack: error?.stack || "",
+        snapshot: getAdminDiagnosticsSnapshot()
+      });
+
+      if (typeof previousOnError === "function") {
+        return previousOnError(message, source, lineno, colno, error);
+      }
+      return false;
+    };
+
+    window.onunhandledrejection = (event) => {
+      const reason = event?.reason;
+      adminStep("ADMIN_STEP_100_WINDOW_UNHANDLED_REJECTION", {
+        type: "unhandled_rejection",
+        message: reason?.message || String(reason || ""),
+        stack: reason?.stack || "",
+        snapshot: getAdminDiagnosticsSnapshot()
+      });
+
+      if (typeof previousOnUnhandledRejection === "function") {
+        previousOnUnhandledRejection(event);
+      }
+    };
+
+    requestAnimationFrame(() => {
+      adminStep("ADMIN_STEP_18_ADMIN_FIRST_FRAME", {
+        activeTab,
+        studentsCount: Array.isArray(students) ? students.length : "not-array",
+        pendingPaymentsCount: Array.isArray(pendingPayments) ? pendingPayments.length : "not-array",
+        leaderboardCount: Array.isArray(memoizedLeaderboard) ? memoizedLeaderboard.length : "not-array",
+        snapshot: getAdminDiagnosticsSnapshot()
+      });
+      adminStep("ADMIN_READY");
+    });
+
+    return () => {
+      adminStep("ADMIN_STEP_19_ADMIN_GLOBAL_EFFECT_CLEANUP");
+      window.onerror = previousOnError;
+      window.onunhandledrejection = previousOnUnhandledRejection;
+    };
   }, []);
 
 
@@ -608,8 +732,16 @@ export default function AdminDashboard() {
   };
 
   return (
+    <AdminInstrumentationBoundary>
     <div className="min-h-screen bg-[#07090e] flex flex-col">
+      {adminRenderBlock("ADMIN_STEP_20_RENDER_ROOT", {
+        activeTab,
+        studentsCount: Array.isArray(students) ? students.length : "not-array",
+        pendingPaymentsCount: Array.isArray(pendingPayments) ? pendingPayments.length : "not-array",
+        leaderboardCount: Array.isArray(memoizedLeaderboard) ? memoizedLeaderboard.length : "not-array"
+      })}
       {/* Header */}
+      {adminRenderBlock("ADMIN_STEP_21_RENDER_HEADER")}
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-all">
           <span className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
@@ -634,6 +766,7 @@ export default function AdminDashboard() {
       </header>
 
       {/* Portal Welcome Section */}
+      {adminRenderBlock("ADMIN_STEP_22_RENDER_WELCOME")}
       <div className="max-w-6xl w-full mx-auto px-4 pt-6 text-center flex flex-col items-center">
         <img 
           src="/logo.png" 
@@ -649,10 +782,15 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Body */}
+      {adminRenderBlock("ADMIN_STEP_23_RENDER_MAIN_BODY")}
       <div className="flex-1 max-w-6xl w-full mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
         
         {/* Left Column: KPI Stats */}
         <div className="lg:col-span-1 space-y-4">
+          {adminRenderBlock("ADMIN_STEP_24_RENDER_KPI_COLUMN", {
+            activeStudentsCount,
+            delinquentStudentsCount
+          })}
           <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-5 space-y-4">
             <h3 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-black">Métricas Clave</h3>
             
@@ -699,6 +837,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Menú de Navegación de Tablas */}
+          {adminRenderBlock("ADMIN_STEP_25_RENDER_ADMIN_NAV", { activeTab })}
           <div className="bg-[#0e121e] border border-slate-900 rounded-2xl p-2.5 flex flex-col gap-1">
             <button
               onClick={() => setActiveTab("students")}
@@ -762,10 +901,14 @@ export default function AdminDashboard() {
 
         {/* Right Column: Tab View Content */}
         <div className="lg:col-span-3">
+          {adminRenderBlock("ADMIN_STEP_26_RENDER_TAB_CONTAINER", { activeTab })}
           
           {/* TAB 1: CONTROL DE ALUMNOS & OVERRIDES */}
           {activeTab === "students" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              {adminRenderBlock("ADMIN_STEP_27_RENDER_STUDENTS_TAB", {
+                studentsCount: Array.isArray(students) ? students.length : "not-array"
+              })}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Expediente General de Alumnos</h2>
@@ -907,12 +1050,12 @@ export default function AdminDashboard() {
 
               {/* VISTA MÓVIL (TARJETAS RESPONSIVAS) */}
               <div className="block md:hidden space-y-3 font-sans">
-                {memoizedLeaderboard.length === 0 ? (
+                {students.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-500 bg-[#07090e]/50 border border-slate-850 rounded-2xl">
                     Aún no hay registros
                   </div>
                 ) : (
-                  memoizedLeaderboard.map((student) => (
+                  students.map((student) => (
                     <div key={student.id} className="bg-[#07090e] border border-slate-850 p-4 rounded-2xl space-y-3 text-left">
                       <div className="flex justify-between items-start">
                         <div>
@@ -1378,6 +1521,7 @@ export default function AdminDashboard() {
           {/* TAB 2: VINCULACIÓN SEGURA DE PADRES */}
           {activeTab === "parent-link" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5 font-sans">
+              {adminRenderBlock("ADMIN_STEP_28_RENDER_PARENT_LINK_TAB")}
               <div>
                 <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Vincular Cuenta Padre</h2>
                 <p className="text-[10px] text-slate-500 mt-0.5">Diagnóstico y vinculación explícita de una cuenta Auth con alumnos concretos.</p>
@@ -1517,6 +1661,10 @@ export default function AdminDashboard() {
 {/* TAB 3: MORA Y RECONCILIACIÓN MP */}
           {activeTab === "billing" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4 font-sans">
+              {adminRenderBlock("ADMIN_STEP_29_RENDER_BILLING_TAB", {
+                studentsCount: Array.isArray(students) ? students.length : "not-array",
+                pendingPaymentsCount: Array.isArray(pendingPayments) ? pendingPayments.length : "not-array"
+              })}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Control de Mora y Recaudos</h2>
@@ -1666,7 +1814,7 @@ export default function AdminDashboard() {
                             onClick={() => {
                               const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name);
                               if (firstPending) {
-                                approvePendingPayment(firstPending.id);
+                                handleApprovePayment(firstPending.id);
                               } else {
                                 confirmManualPayment(student.id);
                               }
@@ -1680,7 +1828,7 @@ export default function AdminDashboard() {
                             onClick={() => {
                               const firstPending = pendingPayments.find(p => (p.studentId && p.studentId === (student.studentId || student.id)) || p.studentName === student.name) || pendingPayments[0];
                               if (firstPending) {
-                                holdPendingPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
+                                handleHoldPayment(firstPending.id, firstPending.studentId || student.studentId || student.id || student.name);
                               } else {
                                 localStorage.setItem("simulatedStatus", "on_hold");
                                 // La UI se actualizará al recibir el nuevo estado desde Firebase/Demo a través del hook.
@@ -1711,6 +1859,9 @@ export default function AdminDashboard() {
           {/* TAB 3: PLANIFICACIÓN DE MICROCICLOS */}
           {activeTab === "schedules" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5">
+              {adminRenderBlock("ADMIN_STEP_30_RENDER_SCHEDULES_TAB", {
+                eventsCount: Array.isArray(events) ? events.length : "not-array"
+              })}
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Planificación de Microciclos</h2>
@@ -1857,6 +2008,9 @@ export default function AdminDashboard() {
           {/* TAB 3.5: GESTOR DE BIBLIOTECA DE EJERCICIOS */}
           {activeTab === "drills" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-5">
+              {adminRenderBlock("ADMIN_STEP_31_RENDER_DRILLS_TAB", {
+                drillsCount: Array.isArray(drills) ? drills.length : "not-array"
+              })}
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Biblioteca de Ejercicios</h2>
@@ -2001,6 +2155,9 @@ export default function AdminDashboard() {
           {/* TAB 3.6: TABLA DE HONOR (GAMIFICACIÓN DEL LEADERBOARD) */}
           {activeTab === "leaderboard" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              {adminRenderBlock("ADMIN_STEP_32_RENDER_LEADERBOARD_TAB", {
+                leaderboardCount: Array.isArray(memoizedLeaderboard) ? memoizedLeaderboard.length : "not-array"
+              })}
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">🏆 Tabla de Honor (Leaderboard)</h2>
@@ -2081,6 +2238,7 @@ export default function AdminDashboard() {
           {/* TAB 4: NOTIFICACIONES OMNICANAL */}
           {activeTab === "notifications" && (
             <div className="bg-[#0e121e] border border-slate-900 rounded-3xl p-5 space-y-4">
+              {adminRenderBlock("ADMIN_STEP_33_RENDER_NOTIFICATIONS_TAB")}
               <div>
                 <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">Canal de Comunicados de Urgencia</h2>
                 <p className="text-[10px] text-slate-500 mt-0.5">Envía notificaciones simultáneas por WhatsApp (Twilio), Correo Electrónico (Resend) y Web Push.</p>
@@ -2122,5 +2280,6 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
+    </AdminInstrumentationBoundary>
   );
 }

@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/firebase";
 import { collection, getDocs, doc, updateDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
+import { adminListenerStarted, adminListenerStopped, adminStep } from "@/lib/adminDiagnostics";
 
 /**
  * Obtiene todos los estudiantes de la base de datos real.
@@ -20,40 +21,67 @@ export async function getStudents() {
  * Suscribe en tiempo real a la lista de estudiantes.
  */
 export function subscribeStudentsList(callback) {
-  return onSnapshot(collection(db, "students"), (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_70_FIRESTORE_LISTENER_STUDENTS_CREATED", { collection: "students" });
+  const unsubscribe = onSnapshot(collection(db, "students"), (snapshot) => {
     const list = [];
     snapshot.forEach((doc) => {
       const data = doc.data();
       list.push({ id: doc.id, studentId: data.studentId || doc.id, ...data });
     });
+    adminStep("ADMIN_STEP_71_FIRESTORE_LISTENER_STUDENTS_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: list.length
+    });
     callback(list);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_72_FIRESTORE_LISTENER_STUDENTS_UNSUBSCRIBE", { collection: "students" });
+    unsubscribe();
+  };
 }
 
 /**
  * Suscribe en tiempo real a todas las evaluaciones técnicas.
  */
 export function subscribeAllEvaluations(callback) {
-  return onSnapshot(collection(db, "evaluations"), (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_73_FIRESTORE_LISTENER_EVALUATIONS_CREATED", { collection: "evaluations" });
+  const unsubscribe = onSnapshot(collection(db, "evaluations"), (snapshot) => {
     const list = [];
     snapshot.forEach((doc) => {
       list.push({ id: doc.id, ...doc.data() });
     });
+    adminStep("ADMIN_STEP_74_FIRESTORE_LISTENER_EVALUATIONS_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: list.length
+    });
     callback(list);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_75_FIRESTORE_LISTENER_EVALUATIONS_UNSUBSCRIBE", { collection: "evaluations" });
+    unsubscribe();
+  };
 }
 
 /**
  * Suscribe en tiempo real a todas las hojas de asistencia consolidadas.
  */
 export function subscribeAllAttendance(callback) {
-  return onSnapshot(collection(db, "attendance"), (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_76_FIRESTORE_LISTENER_ATTENDANCE_CREATED", { collection: "attendance" });
+  const unsubscribe = onSnapshot(collection(db, "attendance"), (snapshot) => {
     const list = [];
     snapshot.forEach((doc) => {
       list.push({ id: doc.id, ...doc.data() });
     });
+    adminStep("ADMIN_STEP_77_FIRESTORE_LISTENER_ATTENDANCE_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: list.length
+    });
     callback(list);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_78_FIRESTORE_LISTENER_ATTENDANCE_UNSUBSCRIBE", { collection: "attendance" });
+    unsubscribe();
+  };
 }
 
 /**
@@ -338,13 +366,22 @@ export async function confirmManualPayment(studentIdOrName) {
 export function subscribePendingPayments(callback) {
   const { onSnapshot, collection, query, where } = require("firebase/firestore");
   const qPayments = query(collection(db, "payments"), where("status", "==", "pending"));
-  return onSnapshot(qPayments, (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_79_FIRESTORE_LISTENER_PENDING_PAYMENTS_CREATED", { collection: "payments", status: "pending" });
+  const unsubscribe = onSnapshot(qPayments, (snapshot) => {
     const pays = [];
     snapshot.forEach((doc) => {
       pays.push({ id: doc.id, ...doc.data() });
     });
+    adminStep("ADMIN_STEP_80_FIRESTORE_LISTENER_PENDING_PAYMENTS_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: pays.length
+    });
     callback(pays);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_81_FIRESTORE_LISTENER_PENDING_PAYMENTS_UNSUBSCRIBE", { collection: "payments", status: "pending" });
+    unsubscribe();
+  };
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/firebase";
 import { collection, getDocs, onSnapshot, query, where, doc, updateDoc } from "firebase/firestore";
+import { adminListenerStarted, adminListenerStopped, adminStep } from "@/lib/adminDiagnostics";
 
 /**
  * Obtiene los eventos del calendario real.
@@ -23,15 +24,24 @@ export function subscribeCalendarEvents(categoryName, callback) {
     ? query(collection(db, "events"), where("category", "==", categoryName))
     : collection(db, "events");
 
-  return onSnapshot(ref, (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_82_FIRESTORE_LISTENER_EVENTS_CREATED", { collection: "events", categoryName });
+  const unsubscribe = onSnapshot(ref, (snapshot) => {
     const list = [];
     snapshot.forEach((doc) => {
       list.push({ id: doc.id, ...doc.data() });
     });
     // Ordenar cronológicamente
     list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    adminStep("ADMIN_STEP_83_FIRESTORE_LISTENER_EVENTS_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: list.length
+    });
     callback(list);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_84_FIRESTORE_LISTENER_EVENTS_UNSUBSCRIBE", { collection: "events", categoryName });
+    unsubscribe();
+  };
 }
 
 /**

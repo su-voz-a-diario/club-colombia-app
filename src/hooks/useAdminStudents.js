@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { AdminService } from "@/services/admin";
+import { adminStep } from "@/lib/adminDiagnostics";
 
 /**
  * Custom Hook para gestionar y escuchar la nómina de estudiantes.
  * @returns {{ data: array, loading: boolean, error: any, refresh: function, updateStudentCategory: function }}
  */
 export function useAdminStudents() {
+  adminStep("ADMIN_STEP_34_USE_ADMIN_STUDENTS_RENDER");
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,16 +25,23 @@ export function useAdminStudents() {
     }
   }, []);
 
+  adminStep("ADMIN_STEP_35_USE_ADMIN_STUDENTS_BEFORE_EFFECT");
   useEffect(() => {
+    adminStep("ADMIN_STEP_36_USE_ADMIN_STUDENTS_EFFECT_ENTER");
     setLoading(true);
     setError(null);
 
+    adminStep("ADMIN_STEP_37_USE_ADMIN_STUDENTS_BEFORE_LISTENER");
     const unsubscribe = AdminService.subscribeStudentsList((list) => {
+      adminStep("ADMIN_STEP_38_USE_ADMIN_STUDENTS_DATA_RECEIVED", {
+        studentsCount: Array.isArray(list) ? list.length : "not-array"
+      });
       setData(list);
       setLoading(false);
     });
 
     return () => {
+      adminStep("ADMIN_STEP_39_USE_ADMIN_STUDENTS_CLEANUP");
       unsubscribe();
     };
   }, []);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AdminService } from "@/services/admin";
+import { adminStep } from "@/lib/adminDiagnostics";
 
 /**
  * Custom Hook para la gestión administrativa de validación de pagos.
@@ -7,22 +8,32 @@ import { AdminService } from "@/services/admin";
  * @returns {{ pendingPayments: array, loading: boolean, error: any, approvePayment: function, holdPayment: function, clearError: function, successMessage: string, clearSuccessMessage: function }}
  */
 export function useAdminPayments() {
+  adminStep("ADMIN_STEP_40_USE_ADMIN_PAYMENTS_RENDER");
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
+  adminStep("ADMIN_STEP_41_USE_ADMIN_PAYMENTS_BEFORE_EFFECT");
   useEffect(() => {
+    adminStep("ADMIN_STEP_42_USE_ADMIN_PAYMENTS_EFFECT_ENTER");
     setLoading(true);
     setError(null);
     
+    adminStep("ADMIN_STEP_43_USE_ADMIN_PAYMENTS_BEFORE_LISTENER");
     const unsubscribe = AdminService.subscribePendingPayments((pays) => {
+      adminStep("ADMIN_STEP_44_USE_ADMIN_PAYMENTS_DATA_RECEIVED", {
+        pendingPaymentsCount: Array.isArray(pays) ? pays.length : "not-array"
+      });
       setPendingPayments(pays);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      adminStep("ADMIN_STEP_45_USE_ADMIN_PAYMENTS_CLEANUP");
+      unsubscribe();
+    };
   }, []);
 
   const clearError = useCallback(() => setError(null), []);

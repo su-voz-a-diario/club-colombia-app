@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { adminListenerStarted, adminListenerStopped, adminStep } from "@/lib/adminDiagnostics";
 
 /**
  * Obtiene el historial de asistencia real del estudiante.
@@ -64,11 +65,20 @@ export function subscribeEvaluations(studentName, callback) {
  */
 export function subscribeDrills(callback) {
   const ref = collection(db, "drills");
-  return onSnapshot(ref, (snapshot) => {
+  adminListenerStarted("ADMIN_STEP_85_FIRESTORE_LISTENER_DRILLS_CREATED", { collection: "drills" });
+  const unsubscribe = onSnapshot(ref, (snapshot) => {
     const list = [];
     snapshot.forEach((doc) => {
       list.push({ id: doc.id, ...doc.data() });
     });
+    adminStep("ADMIN_STEP_86_FIRESTORE_LISTENER_DRILLS_SNAPSHOT", {
+      docsCount: snapshot.size,
+      mappedCount: list.length
+    });
     callback(list);
   });
+  return () => {
+    adminListenerStopped("ADMIN_STEP_87_FIRESTORE_LISTENER_DRILLS_UNSUBSCRIBE", { collection: "drills" });
+    unsubscribe();
+  };
 }
