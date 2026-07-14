@@ -53,6 +53,15 @@ export default function AdminDashboard() {
 
   // Datos consumidos desde capa de servicios
   const { data: students, loading: studentsLoading, error: studentsError, manualRegisterStudent, applyCategoryOverride, confirmManualPayment } = useAdminStudents();
+  
+  const activeStudentsCount = React.useMemo(() => {
+    return (students || []).filter(s => s.status === "active").length;
+  }, [students]);
+
+  const delinquentStudentsCount = React.useMemo(() => {
+    return (students || []).filter(s => s.status === "active" && Number(s.dueDays || 0) > 5).length;
+  }, [students]);
+
   const [activeTab, setActiveTab] = useState("students"); // 'students' | 'billing' | 'schedules' | 'notifications'
   
   // Estados para override
@@ -465,9 +474,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const getLeaderboard = () => {
+  const memoizedLeaderboard = React.useMemo(() => {
     return calculateLeaderboard(students, evaluations, allAttendance);
-  };
+  }, [students, evaluations, allAttendance]);
 
 
   useEffect(() => {
@@ -653,7 +662,7 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Plantilla Activa</span>
                 <span className="text-xl font-display font-black text-slate-200 flex items-center gap-1.5 mt-0.5">
                   <Users className="w-4 h-4 text-[#10b981]" />
-                  {students.length > 0 ? students.filter(s => s.status === "active").length : "Sin información"}
+                  {students.length > 0 ? activeStudentsCount : "Sin información"}
                 </span>
                 {students.length > 0 && (
                   <span className="text-[9px] text-slate-500 font-mono mt-1 block">
@@ -676,8 +685,8 @@ export default function AdminDashboard() {
                 <span className="text-[9px] text-slate-400 font-bold uppercase block">Tasa de Morosidad</span>
                 <span className="text-xl font-display font-black text-amber-500 flex items-center gap-1.5 mt-0.5 animate-pulse">
                   <AlertTriangle className="w-4 h-4" />
-                  {students.filter(s => s.status === "active").length > 0
-                    ? `${((students.filter(s => s.status === "active" && Number(s.dueDays || 0) > 5).length / students.filter(s => s.status === "active").length) * 100).toFixed(0)}%`
+                  {activeStudentsCount > 0
+                    ? `${((delinquentStudentsCount / activeStudentsCount) * 100).toFixed(0)}%`
                     : "Sin información"}
                 </span>
                 {students.length > 0 && (
@@ -898,12 +907,12 @@ export default function AdminDashboard() {
 
               {/* VISTA MÓVIL (TARJETAS RESPONSIVAS) */}
               <div className="block md:hidden space-y-3 font-sans">
-                {students.length === 0 ? (
+                {memoizedLeaderboard.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-500 bg-[#07090e]/50 border border-slate-850 rounded-2xl">
                     Aún no hay registros
                   </div>
                 ) : (
-                  students.map((student) => (
+                  memoizedLeaderboard.map((student) => (
                     <div key={student.id} className="bg-[#07090e] border border-slate-850 p-4 rounded-2xl space-y-3 text-left">
                       <div className="flex justify-between items-start">
                         <div>
@@ -2012,13 +2021,13 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
-                    {getLeaderboard().length === 0 ? (
+                    {memoizedLeaderboard.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
                           Aún no hay registros
                         </td>
                       </tr>
-                    ) : getLeaderboard().map((item, index) => {
+                    ) : memoizedLeaderboard.map((item, index) => {
                       const isTop3 = index < 3;
                       const placeColors = [
                         "text-amber-400 bg-amber-500/10 border border-amber-500/20", // Oro

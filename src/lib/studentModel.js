@@ -21,9 +21,28 @@ export function categoryNameToId(categoryName) {
  * @returns {array}
  */
 export function calculateLeaderboard(students, evaluations, allAttendance) {
+  const evalsMap = new Map();
+  (evaluations || []).forEach(ev => {
+    if (!ev.studentName) return;
+    if (!evalsMap.has(ev.studentName)) evalsMap.set(ev.studentName, []);
+    evalsMap.get(ev.studentName).push(ev);
+  });
+
+  const attendanceMap = new Map();
+  (allAttendance || []).forEach(att => {
+    (att.records || []).forEach(r => {
+      if (!r.name) return;
+      if (!attendanceMap.has(r.name)) attendanceMap.set(r.name, { total: 0, present: 0 });
+      const stats = attendanceMap.get(r.name);
+      stats.total++;
+      if (r.status === "P" || r.status === "J") {
+        stats.present++;
+      }
+    });
+  });
+
   return (students || []).filter(student => student.status === "active").map(student => {
-    // 1. Promedio de evaluaciones
-    const studentEvals = (evaluations || []).filter(ev => ev.studentName === student.name);
+    const studentEvals = evalsMap.get(student.name) || [];
     let avgScore = null;
     if (studentEvals.length > 0) {
       const sum = studentEvals.reduce((acc, curr) => {
@@ -34,21 +53,12 @@ export function calculateLeaderboard(students, evaluations, allAttendance) {
       avgScore = sum / studentEvals.length;
     }
 
-    // 2. Tasa de asistencia
-    let totalSessions = 0;
-    let presentSessions = 0;
-    (allAttendance || []).forEach(att => {
-      const record = att.records?.find(r => r.name === student.name);
-      if (record) {
-        totalSessions++;
-        if (record.status === "P" || record.status === "J") {
-          presentSessions++;
-        }
-      }
-    });
-    const attendanceRate = totalSessions > 0 ? (presentSessions / totalSessions) * 100 : null;
+    const attStats = attendanceMap.get(student.name);
+    let attendanceRate = null;
+    if (attStats && attStats.total > 0) {
+      attendanceRate = (attStats.present / attStats.total) * 100;
+    }
 
-    // 3. Puntos ponderados (Evaluaciones 60%, Asistencia 40%)
     const overallPoints = avgScore !== null && attendanceRate !== null
       ? (avgScore * 10) * 0.6 + attendanceRate * 0.4
       : null;
