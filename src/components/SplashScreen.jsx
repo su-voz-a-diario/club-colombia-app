@@ -1,32 +1,59 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+const SPLASH_FALLBACK_TIMEOUT_MS = 4500;
+const SPLASH_FADE_OUT_MS = 1000;
 
 export default function SplashScreen() {
   const [showSplash, setShowSplash] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
+  const hideTimeoutRef = useRef(null);
+  const fallbackTimeoutRef = useRef(null);
+
+  const dismissSplash = useCallback(() => {
+    setIsFadingOut(true);
+
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+    }
+
+    hideTimeoutRef.current = setTimeout(() => {
+      setShowSplash(false);
+    }, SPLASH_FADE_OUT_MS);
+  }, []);
 
   useEffect(() => {
-    // Verificar si el splash ya se mostró en esta sesión
-    const hasSeenSplash = sessionStorage.getItem('hasSeenSplash');
-    
-    if (hasSeenSplash) {
+    try {
+      const hasSeenSplash = sessionStorage.getItem('hasSeenSplash');
+      if (hasSeenSplash) {
+        setShowSplash(false);
+        return;
+      }
+
+      sessionStorage.setItem('hasSeenSplash', 'true');
+    } catch (err) {
+      console.warn('No fue posible leer sessionStorage para el splash:', err);
       setShowSplash(false);
       return;
     }
-    
-    // Si no se ha visto, lo marcamos para que no vuelva a aparecer al recargar/navegar
-    sessionStorage.setItem('hasSeenSplash', 'true');
-  }, []);
+
+    fallbackTimeoutRef.current = setTimeout(() => {
+      dismissSplash();
+    }, SPLASH_FALLBACK_TIMEOUT_MS);
+
+    return () => {
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+      }
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, [dismissSplash]);
 
   const handleVideoEnd = () => {
-    // Iniciar el efecto de desvanecimiento
-    setIsFadingOut(true);
-    
-    // Desmontar el componente completamente después de 1 segundo (tiempo del fade out)
-    setTimeout(() => {
-      setShowSplash(false);
-    }, 1000);
+    dismissSplash();
   };
 
   if (!showSplash) return null;
@@ -42,6 +69,8 @@ export default function SplashScreen() {
         muted
         playsInline
         onEnded={handleVideoEnd}
+        onError={dismissSplash}
+        onStalled={dismissSplash}
         className="w-full h-full object-cover"
       >
         <source src="/videos/splash.mp4" type="video/mp4" />
