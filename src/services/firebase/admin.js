@@ -370,9 +370,11 @@ export function subscribePendingPayments(callback) {
     where("status", "==", "pending")
   );
 
-  console.log("query creada", q);
+  const unsubscribe = onSnapshot(q, () => {
+    console.log("payments snapshot received");
+  });
 
-  return () => {};
+  return unsubscribe;
 }
 
 /**
