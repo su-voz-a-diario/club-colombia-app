@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import { useAdminStudents } from "@/hooks/useAdminStudents";
 
 const tabs = [
   { id: "students", label: "Control de Alumnos y Excepciones", title: "Control de Alumnos" },
@@ -16,6 +17,7 @@ const tabs = [
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("students");
+  const { data: students } = useAdminStudents();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 
   return (
@@ -89,7 +91,7 @@ export default function AdminDashboard() {
             </div>
             <div className="h-64 flex items-center justify-center text-center">
               <p className="text-xs text-slate-500 max-w-sm">
-                El contenido administrativo de esta pestaña permanece desactivado durante esta etapa.
+                Cantidad de alumnos: {students.length}
               </p>
             </div>
           </section>
