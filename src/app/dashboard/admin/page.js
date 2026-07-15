@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
 
@@ -22,6 +23,7 @@ export default function AdminDashboard() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentSort, setPaymentSort] = useState("newest");
   const { data: students } = useAdminStudents();
+  const { data: attendance } = useAdminAttendance();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
   const filteredPayments = useMemo(() => {
@@ -139,6 +141,9 @@ export default function AdminDashboard() {
                 </p>
                 <p className="text-xs text-slate-500 mb-3">
                   Cantidad de alumnos: {students.length}
+                </p>
+                <p className="text-xs text-slate-500 mb-3">
+                  Asistencias: {attendance.length}
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-sans">
