@@ -66,22 +66,11 @@ export function subscribeAllEvaluations(callback) {
  * Suscribe en tiempo real a todas las hojas de asistencia consolidadas.
  */
 export function subscribeAllAttendance(callback) {
-  adminListenerStarted("ADMIN_STEP_76_FIRESTORE_LISTENER_ATTENDANCE_CREATED", { collection: "attendance" });
-  const unsubscribe = onSnapshot(collection(db, "attendance"), (snapshot) => {
-    const list = [];
-    snapshot.forEach((doc) => {
-      list.push({ id: doc.id, ...doc.data() });
-    });
-    adminStep("ADMIN_STEP_77_FIRESTORE_LISTENER_ATTENDANCE_SNAPSHOT", {
-      docsCount: snapshot.size,
-      mappedCount: list.length
-    });
-    callback(list);
+  const unsubscribe = onSnapshot(collection(db, "attendance"), () => {
+    console.log("attendance snapshot received");
   });
-  return () => {
-    adminListenerStopped("ADMIN_STEP_78_FIRESTORE_LISTENER_ATTENDANCE_UNSUBSCRIBE", { collection: "attendance" });
-    unsubscribe();
-  };
+
+  return unsubscribe;
 }
 
 /**
