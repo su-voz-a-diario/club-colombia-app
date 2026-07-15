@@ -364,23 +364,13 @@ export async function confirmManualPayment(studentIdOrName) {
  * Suscribe en tiempo real a los pagos en estado "pending".
  */
 export function subscribePendingPayments(callback) {
-  const { onSnapshot, collection, query, where } = require("firebase/firestore");
-  const qPayments = query(collection(db, "payments"), where("status", "==", "pending"));
-  adminListenerStarted("ADMIN_STEP_79_FIRESTORE_LISTENER_PENDING_PAYMENTS_CREATED", { collection: "payments", status: "pending" });
-  const unsubscribe = onSnapshot(qPayments, (snapshot) => {
-    const pays = [];
-    snapshot.forEach((doc) => {
-      pays.push({ id: doc.id, ...doc.data() });
-    });
-    adminStep("ADMIN_STEP_80_FIRESTORE_LISTENER_PENDING_PAYMENTS_SNAPSHOT", {
-      docsCount: snapshot.size,
-      mappedCount: pays.length
-    });
-    callback(pays);
+  const { collection } = require("firebase/firestore");
+  const paymentsRef = collection(db, "payments");
+  adminStep("ADMIN_PAYMENTS_SUBSCRIBE_STAGE_S1_COLLECTION_CREATED", {
+    path: paymentsRef.path
   });
   return () => {
-    adminListenerStopped("ADMIN_STEP_81_FIRESTORE_LISTENER_PENDING_PAYMENTS_UNSUBSCRIBE", { collection: "payments", status: "pending" });
-    unsubscribe();
+    adminStep("ADMIN_PAYMENTS_SUBSCRIBE_STAGE_S1_CLEANUP");
   };
 }
 
