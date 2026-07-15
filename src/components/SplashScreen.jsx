@@ -3,24 +3,35 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const SPLASH_FALLBACK_TIMEOUT_MS = 4500;
-const SPLASH_FADE_OUT_MS = 1000;
+const SPLASH_END_DELAY_MS = 150;
+const SPLASH_FADE_OUT_MS = 450;
 
 export default function SplashScreen() {
   const [showSplash, setShowSplash] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
+  const endDelayTimeoutRef = useRef(null);
   const hideTimeoutRef = useRef(null);
   const fallbackTimeoutRef = useRef(null);
+  const isDismissingRef = useRef(false);
 
-  const dismissSplash = useCallback(() => {
-    setIsFadingOut(true);
+  const dismissSplash = useCallback((delayMs = 0) => {
+    if (isDismissingRef.current) return;
+    isDismissingRef.current = true;
 
+    if (endDelayTimeoutRef.current) {
+      clearTimeout(endDelayTimeoutRef.current);
+    }
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
     }
 
-    hideTimeoutRef.current = setTimeout(() => {
-      setShowSplash(false);
-    }, SPLASH_FADE_OUT_MS);
+    endDelayTimeoutRef.current = setTimeout(() => {
+      setIsFadingOut(true);
+
+      hideTimeoutRef.current = setTimeout(() => {
+        setShowSplash(false);
+      }, SPLASH_FADE_OUT_MS);
+    }, delayMs);
   }, []);
 
   useEffect(() => {
@@ -43,6 +54,9 @@ export default function SplashScreen() {
     }, SPLASH_FALLBACK_TIMEOUT_MS);
 
     return () => {
+      if (endDelayTimeoutRef.current) {
+        clearTimeout(endDelayTimeoutRef.current);
+      }
       if (fallbackTimeoutRef.current) {
         clearTimeout(fallbackTimeoutRef.current);
       }
@@ -53,25 +67,29 @@ export default function SplashScreen() {
   }, [dismissSplash]);
 
   const handleVideoEnd = () => {
-    dismissSplash();
+    dismissSplash(SPLASH_END_DELAY_MS);
   };
 
   if (!showSplash) return null;
 
   return (
     <div 
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black transition-opacity duration-1000 ease-in-out ${
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black pointer-events-none transition-opacity ease-out ${
         isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
+      style={{ transitionDuration: `${SPLASH_FADE_OUT_MS}ms` }}
     >
       <video
         autoPlay
         muted
         playsInline
+        preload="auto"
+        disablePictureInPicture
+        controlsList="nodownload nofullscreen noremoteplayback"
         onEnded={handleVideoEnd}
-        onError={dismissSplash}
-        onStalled={dismissSplash}
-        className="w-full h-full object-cover"
+        onError={() => dismissSplash()}
+        onStalled={() => dismissSplash()}
+        className="w-full h-full object-contain select-none"
       >
         <source src="/videos/splash.mp4" type="video/mp4" />
         Tu navegador no soporta el formato de video.
