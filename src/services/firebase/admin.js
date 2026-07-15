@@ -364,10 +364,11 @@ export async function confirmManualPayment(studentIdOrName) {
  * Suscribe en tiempo real a los pagos en estado "pending".
  */
 export function subscribePendingPayments(callback) {
-  console.log("subscribePendingPayments S0 entered");
-  return () => {
-    console.log("subscribePendingPayments S0 cleanup");
-  };
+  console.log("S0.5 entered");
+  const firestore = require("firebase/firestore");
+  console.log("S0.5 require ok");
+
+  return () => {};
 }
 
 /**
