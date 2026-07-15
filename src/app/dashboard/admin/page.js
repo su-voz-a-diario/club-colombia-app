@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { LogOut, Trophy, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle, LogOut, Trophy, Video } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminDrills } from "@/hooks/useAdminDrills";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
@@ -39,12 +39,24 @@ export default function AdminDashboard() {
   const [drillSearch, setDrillSearch] = useState("");
   const [drillCategoryFilter, setDrillCategoryFilter] = useState("all");
   const [drillSort, setDrillSort] = useState("title-asc");
+  const [approvingPaymentId, setApprovingPaymentId] = useState("");
   const { data: students } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
   const { drills, loading: drillsLoading, error: drillsError } = useAdminDrills();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
   const { events, loading: eventsLoading, error: eventsError } = useAdminEvents();
-  const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
+  const {
+    pendingPayments,
+    loading: paymentsLoading,
+    error: paymentsError,
+    successMessage: paymentSuccessMessage,
+    actionLoading: paymentActionLoading,
+    approvePayment,
+    holdPayment,
+    processSuspensions,
+    clearError: clearPaymentError,
+    clearSuccessMessage: clearPaymentSuccessMessage
+  } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
   const allAttendance = attendance;
   const getTimeValue = (value) => {
@@ -276,6 +288,54 @@ export default function AdminDashboard() {
     }).format(Number(amount || 0));
   };
 
+  const handleApprovePayment = async (paymentId) => {
+    if (paymentActionLoading || !paymentId) return;
+    const confirmed = window.confirm("¿Confirmas que este pago fue validado correctamente?");
+    if (!confirmed) return;
+
+    setApprovingPaymentId(paymentId);
+    clearPaymentError();
+    clearPaymentSuccessMessage();
+
+    try {
+      await approvePayment(paymentId);
+    } catch (err) {
+      // El hook expone el error para la UI.
+    } finally {
+      setApprovingPaymentId("");
+    }
+  };
+
+  const handleHoldPayment = async (paymentId, studentIdOrName) => {
+    if (paymentActionLoading || !paymentId) return;
+    const confirmed = window.confirm("¿Deseas poner este pago en espera?");
+    if (!confirmed) return;
+
+    clearPaymentError();
+    clearPaymentSuccessMessage();
+
+    try {
+      await holdPayment(paymentId, studentIdOrName);
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const handleProcessSuspensions = async () => {
+    if (paymentActionLoading) return;
+    const confirmed = window.confirm("¿Procesar suspensiones por mora para alumnos activos con más de 5 días de deuda?");
+    if (!confirmed) return;
+
+    clearPaymentError();
+    clearPaymentSuccessMessage();
+
+    try {
+      await processSuspensions();
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#07090e] flex flex-col">
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
@@ -480,6 +540,32 @@ export default function AdminDashboard() {
               </div>
             ) : activeTab === "billing" ? (
               <div className="pt-4 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                      Control de Mora y Recaudos
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Valida pagos reportados y procesa suspensiones por mora cuando corresponda.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleProcessSuspensions}
+                    disabled={paymentActionLoading}
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-500 text-white font-display font-bold text-xs px-5 py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {paymentActionLoading ? (
+                      "Procesando..."
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4" />
+                        Procesar Suspensión por Mora
+                      </>
+                    )}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Pendientes</p>
@@ -532,6 +618,13 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
+                {paymentSuccessMessage && (
+                  <div className="bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981] p-3.5 rounded-xl text-xs flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>{paymentSuccessMessage}</span>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-sans">
                     <thead>
@@ -542,18 +635,19 @@ export default function AdminDashboard() {
                         <th className="pb-3">Tipo</th>
                         <th className="pb-3">Fecha</th>
                         <th className="pb-3">Estado</th>
+                        <th className="pb-3 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
                       {paymentsLoading ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
                             Cargando pagos pendientes...
                           </td>
                         </tr>
                       ) : filteredPayments.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
                             No hay pagos pendientes para mostrar.
                           </td>
                         </tr>
@@ -568,6 +662,26 @@ export default function AdminDashboard() {
                             <span className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[9px] font-black uppercase">
                               {payment.status || "pending"}
                             </span>
+                          </td>
+                          <td className="py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleApprovePayment(payment.id)}
+                                disabled={approvingPaymentId === payment.id || paymentActionLoading}
+                                className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-3 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                {approvingPaymentId === payment.id ? "Aprobando..." : "OK"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleHoldPayment(payment.id, payment.studentId || payment.studentName)}
+                                disabled={paymentActionLoading}
+                                className="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-3 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                En Espera
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
