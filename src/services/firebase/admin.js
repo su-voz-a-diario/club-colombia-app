@@ -371,10 +371,16 @@ export function subscribePendingPayments(callback) {
   );
 
   const unsubscribe = onSnapshot(q, (snapshot) => {
-    console.log("payments docs:", snapshot.docs.length);
+    const pays = [];
+
     snapshot.forEach((doc) => {
-      doc.data();
+      pays.push({
+        id: doc.id,
+        ...doc.data(),
+      });
     });
+
+    console.log("payments array:", pays.length);
   });
 
   return unsubscribe;
