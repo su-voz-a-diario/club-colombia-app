@@ -86,6 +86,36 @@ export function useAdminStudents() {
     }
   }, []);
 
+  const updateStudentLifecycleStatus = useCallback(async (studentId, status, context = {}) => {
+    setError(null);
+    try {
+      return await AdminService.updateStudentLifecycleStatus(studentId, status, context);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
+  const getStudentLifecycleHistory = useCallback(async (student) => {
+    setError(null);
+    try {
+      return await AdminService.getStudentLifecycleHistory(student);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
+  const deleteEmptyStudent = useCallback(async (student) => {
+    setError(null);
+    try {
+      return await AdminService.deleteEmptyStudent(student);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
   return {
     data,
     loading,
@@ -94,7 +124,10 @@ export function useAdminStudents() {
     updateStudentCategory,
     manualRegisterStudent,
     applyCategoryOverride,
-    confirmManualPayment
+    confirmManualPayment,
+    updateStudentLifecycleStatus,
+    getStudentLifecycleHistory,
+    deleteEmptyStudent
   };
 }
 export default useAdminStudents;

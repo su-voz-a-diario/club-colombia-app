@@ -2,14 +2,15 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle, LogOut, Trophy, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle, LogOut, Sparkles, Trophy, Users, Video } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminDrills } from "@/hooks/useAdminDrills";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
 import { useAdminEvents } from "@/hooks/useAdminEvents";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
-import { calculateLeaderboard } from "@/lib/studentModel";
+import { calculateLeaderboard, categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
+import { normalizeAndValidatePhone } from "@/lib/phone";
 
 const tabs = [
   { id: "students", label: "Control de Alumnos y Excepciones", title: "Control de Alumnos" },
@@ -21,6 +22,38 @@ const tabs = [
   { id: "leaderboard", label: "Tabla de Honor (Leaderboard)", title: "Tabla de Honor" },
   { id: "notifications", label: "Notificaciones Omnicanal", title: "Notificaciones" }
 ];
+
+const lifecycleActions = {
+  reactivate: {
+    label: "Reactivar Alumno",
+    status: "active",
+    tone: "emerald",
+    description: "El alumno volverá a estar activo sin modificar historial, pagos, asistencias, evaluaciones, padre ni categoría."
+  },
+  suspend: {
+    label: "Suspender Alumno",
+    status: "suspended",
+    tone: "amber",
+    description: "El acceso del alumno será restringido por una razón administrativa. Toda la información histórica se conserva."
+  },
+  inactive: {
+    label: "Dar de Baja",
+    status: "inactive",
+    tone: "slate",
+    description: "El alumno dejará de formar parte de los alumnos activos, pero toda su información permanecerá almacenada."
+  },
+  delete: {
+    label: "Eliminar Definitivamente",
+    status: "",
+    tone: "red",
+    description: "Acción reservada para registros duplicados, pruebas o errores de captura. El borrado físico está bloqueado por seguridad."
+  }
+};
+
+const lifecycleReasonOptions = {
+  suspend: ["Adeudo administrativo", "Disciplina", "Documentación pendiente", "Solicitud del acudiente", "Otro"],
+  inactive: ["Retiro temporal", "Cambio de club", "Cambio de ciudad", "Pausa familiar", "Otro"]
+};
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("students");
@@ -40,7 +73,39 @@ export default function AdminDashboard() {
   const [drillCategoryFilter, setDrillCategoryFilter] = useState("all");
   const [drillSort, setDrillSort] = useState("title-asc");
   const [approvingPaymentId, setApprovingPaymentId] = useState("");
-  const { data: students } = useAdminStudents();
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [newCategory, setNewCategory] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [manualStudentName, setManualStudentName] = useState("");
+  const [manualStudentAge, setManualStudentAge] = useState("");
+  const [manualParentName, setManualParentName] = useState("");
+  const [manualParentPhone, setManualParentPhone] = useState("");
+  const [manualPaidCash, setManualPaidCash] = useState(false);
+  const [manualPaymentConcept, setManualPaymentConcept] = useState("monthly");
+  const [studentActionLoading, setStudentActionLoading] = useState(false);
+  const [studentSuccessMessage, setStudentSuccessMessage] = useState("");
+  const [studentErrorMessage, setStudentErrorMessage] = useState("");
+  const [managedStudent, setManagedStudent] = useState(null);
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null);
+  const [lifecycleDeleteText, setLifecycleDeleteText] = useState("");
+  const [lifecycleReason, setLifecycleReason] = useState("");
+  const [lifecycleOtherReason, setLifecycleOtherReason] = useState("");
+  const [lifecycleHistory, setLifecycleHistory] = useState(null);
+  const [lifecycleLoading, setLifecycleLoading] = useState(false);
+  const [lifecycleMessage, setLifecycleMessage] = useState("");
+  const [lifecycleError, setLifecycleError] = useState("");
+  const {
+    data: students,
+    loading: studentsLoading,
+    error: studentsError,
+    manualRegisterStudent,
+    applyCategoryOverride,
+    confirmManualPayment,
+    updateStudentLifecycleStatus,
+    getStudentLifecycleHistory,
+    deleteEmptyStudent
+  } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
   const { drills, loading: drillsLoading, error: drillsError } = useAdminDrills();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
@@ -336,6 +401,195 @@ export default function AdminDashboard() {
     }
   };
 
+  const resetManualStudentForm = () => {
+    setManualStudentName("");
+    setManualStudentAge("");
+    setManualParentName("");
+    setManualParentPhone("");
+    setManualPaidCash(false);
+    setManualPaymentConcept("monthly");
+  };
+
+  const handleManualRegister = async (event) => {
+    event.preventDefault();
+    if (studentActionLoading) return;
+
+    setStudentActionLoading(true);
+    setStudentSuccessMessage("");
+    setStudentErrorMessage("");
+
+    try {
+      const ageNum = Number(manualStudentAge);
+      let category = "Sub-8 Iniciación";
+      if (ageNum > 8 && ageNum <= 10) {
+        category = "Sub-10 Competitivo";
+      } else if (ageNum > 10 && ageNum <= 12) {
+        category = "Sub-12 Elite";
+      } else if (ageNum > 12) {
+        category = "Sub-15 Avanzado";
+      }
+
+      const studentData = {
+        name: manualStudentName.trim(),
+        normalizedName: normalizeStudentName(manualStudentName),
+        age: ageNum,
+        parentName: manualParentName.trim(),
+        parentPhone: normalizeAndValidatePhone(manualParentPhone),
+        parentEmail: "",
+        parentUid: "",
+        categoryId: categoryNameToId(category),
+        category,
+        assignedCoachUid: "",
+        assignment: "automatic",
+        status: manualPaidCash ? "active" : "suspended",
+        billingStatus: manualPaidCash ? "paid" : "pending_payment",
+        healthStatus: "optimal",
+        dueDays: manualPaidCash ? 0 : 7
+      };
+
+      await manualRegisterStudent(studentData, manualPaidCash, manualPaymentConcept);
+      setStudentSuccessMessage("Alumno registrado correctamente.");
+      resetManualStudentForm();
+      setShowAddForm(false);
+    } catch (err) {
+      setStudentErrorMessage(err.message || "No fue posible registrar al alumno.");
+    } finally {
+      setStudentActionLoading(false);
+    }
+  };
+
+  const handleApplyOverride = async (event) => {
+    event.preventDefault();
+    if (!selectedStudent || studentActionLoading) return;
+
+    setStudentActionLoading(true);
+    setStudentSuccessMessage("");
+    setStudentErrorMessage("");
+
+    try {
+      await applyCategoryOverride(selectedStudent.studentId || selectedStudent.id, {
+        category: newCategory,
+        categoryId: categoryNameToId(newCategory),
+        assignment: "manual_override",
+        overrideReason: overrideReason.trim()
+      });
+      setStudentSuccessMessage("Excepción de categoría guardada correctamente.");
+      setSelectedStudent(null);
+      setNewCategory("");
+      setOverrideReason("");
+    } catch (err) {
+      setStudentErrorMessage(err.message || "No fue posible guardar la excepción.");
+    } finally {
+      setStudentActionLoading(false);
+    }
+  };
+
+  const handleConfirmManualPayment = async (studentIdOrName) => {
+    if (studentActionLoading || !studentIdOrName) return;
+    const confirmed = window.confirm("¿Confirmas el pago manual de este alumno?");
+    if (!confirmed) return;
+
+    setStudentActionLoading(true);
+    setStudentSuccessMessage("");
+    setStudentErrorMessage("");
+
+    try {
+      await confirmManualPayment(studentIdOrName);
+      setStudentSuccessMessage("Pago manual confirmado correctamente.");
+    } catch (err) {
+      setStudentErrorMessage(err.message || "No fue posible confirmar el pago manual.");
+    } finally {
+      setStudentActionLoading(false);
+    }
+  };
+
+  const openLifecycleModal = (student) => {
+    setManagedStudent(student);
+    setPendingLifecycleAction(null);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleHistory(null);
+    setLifecycleMessage("");
+    setLifecycleError("");
+  };
+
+  const closeLifecycleModal = () => {
+    setManagedStudent(null);
+    setPendingLifecycleAction(null);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleHistory(null);
+    setLifecycleMessage("");
+    setLifecycleError("");
+  };
+
+  const prepareLifecycleAction = async (actionKey) => {
+    setPendingLifecycleAction(actionKey);
+    setLifecycleDeleteText("");
+    setLifecycleReason("");
+    setLifecycleOtherReason("");
+    setLifecycleMessage("");
+    setLifecycleError("");
+    setLifecycleHistory(null);
+
+    if (actionKey === "delete" && managedStudent) {
+      setLifecycleLoading(true);
+      try {
+        const history = await getStudentLifecycleHistory(managedStudent);
+        setLifecycleHistory(history);
+      } catch (err) {
+        setLifecycleError(err.message || "No fue posible revisar el historial del alumno.");
+      } finally {
+        setLifecycleLoading(false);
+      }
+    }
+  };
+
+  const executeLifecycleStatusAction = async () => {
+    if (!managedStudent || !pendingLifecycleAction) return;
+    const action = lifecycleActions[pendingLifecycleAction];
+    if (!action?.status) return;
+
+    const confirmed = window.confirm(`¿Confirmas la acción "${action.label}" para ${managedStudent.name}?`);
+    if (!confirmed) return;
+
+    setLifecycleLoading(true);
+    setLifecycleError("");
+    setLifecycleMessage("");
+
+    try {
+      const reasonDetail = lifecycleReason === "Otro" ? lifecycleOtherReason.trim() : "";
+      await updateStudentLifecycleStatus(managedStudent.studentId || managedStudent.id, action.status, {
+        reason: lifecycleReason,
+        reasonDetail
+      });
+      setLifecycleMessage(`${action.label} aplicado correctamente. No se modificó historial ni relaciones.`);
+    } catch (err) {
+      setLifecycleError(err.message || "No fue posible actualizar el estado del alumno.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  };
+
+  const executeProtectedDelete = async () => {
+    if (!managedStudent || lifecycleDeleteText !== "ELIMINAR") return;
+    setLifecycleLoading(true);
+    setLifecycleError("");
+    setLifecycleMessage("");
+
+    try {
+      const result = await deleteEmptyStudent(managedStudent);
+      setLifecycleHistory(result.history || null);
+      setLifecycleError("El borrado físico está bloqueado por seguridad. Utilice la opción Dar de Baja.");
+    } catch (err) {
+      setLifecycleError(err.message || "No fue posible validar la eliminación del alumno.");
+    } finally {
+      setLifecycleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#07090e] flex flex-col">
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
@@ -406,137 +660,379 @@ export default function AdminDashboard() {
               </p>
             </div>
             {activeTab === "students" ? (
-              <div className="pt-4">
-                <p className="text-xs text-slate-500 mb-3">
-                  Pagos pendientes: {pendingPayments.length}
-                </p>
-                <p className="text-xs text-slate-500 mb-3">
-                  Cantidad de alumnos: {students.length}
-                </p>
-                <p className="text-xs text-slate-500 mb-3">
-                  Asistencias: {attendance.length}
-                </p>
-                <p className="text-xs text-slate-500 mb-3">
-                  Evaluaciones: {evaluations.length}
-                </p>
-                <div className="overflow-x-auto">
+              <div className="pt-4 space-y-5">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                      Expediente General de Alumnos
+                    </h2>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Gestión de deportistas, categorías, pagos manuales y ciclo de vida administrativo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className="bg-[#10b981] hover:bg-[#059669] text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 uppercase tracking-wider font-sans shrink-0"
+                  >
+                    {showAddForm ? "Cerrar Registro" : "+ Inscribir Alumno Manual"}
+                  </button>
+                </div>
+
+                {(studentSuccessMessage || studentErrorMessage || studentsError) && (
+                  <div className={`p-3.5 rounded-xl text-xs flex items-center gap-2 ${
+                    studentErrorMessage || studentsError
+                      ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                      : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  }`}>
+                    {studentErrorMessage || studentsError ? (
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span>{studentErrorMessage || studentsError?.message || studentSuccessMessage}</span>
+                  </div>
+                )}
+
+                {showAddForm && (
+                  <form onSubmit={handleManualRegister} className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in space-y-4 font-sans text-left">
+                    <div className="flex items-center gap-1.5 text-[#10b981] font-display font-bold text-xs uppercase tracking-wider">
+                      <Users className="w-4 h-4" />
+                      Inscripción Manual de Alumno
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-bold block mb-1">Nombre completo del alumno</label>
+                        <input
+                          type="text"
+                          required
+                          value={manualStudentName}
+                          onChange={(event) => setManualStudentName(event.target.value)}
+                          placeholder="Ej. Carlos López Jr."
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981] font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-bold block mb-1">Edad del alumno</label>
+                        <input
+                          type="number"
+                          required
+                          min="5"
+                          max="17"
+                          value={manualStudentAge}
+                          onChange={(event) => setManualStudentAge(event.target.value)}
+                          placeholder="Ej. 9"
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-bold block mb-1">Nombre del representante</label>
+                        <input
+                          type="text"
+                          required
+                          value={manualParentName}
+                          onChange={(event) => setManualParentName(event.target.value)}
+                          placeholder="Ej. Carlos López Padre"
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-bold block mb-1">Teléfono de contacto</label>
+                        <input
+                          type="tel"
+                          required
+                          value={manualParentPhone}
+                          onChange={(event) => setManualParentPhone(event.target.value)}
+                          placeholder="+57 300 123 4567"
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3 bg-[#0e121e]/80 p-3.5 rounded-xl border border-slate-800/80">
+                      <label className="flex items-center gap-3 text-xs text-slate-300 font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={manualPaidCash}
+                          onChange={(event) => setManualPaidCash(event.target.checked)}
+                          className="w-4 h-4 accent-[#10b981] rounded cursor-pointer"
+                        />
+                        Registrar pago inicial recibido
+                      </label>
+                      {manualPaidCash && (
+                        <div className="pl-7 space-y-2">
+                          <label className="text-[8px] text-slate-400 font-bold block uppercase">Concepto de pago inicial</label>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setManualPaymentConcept("monthly")}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                manualPaymentConcept === "monthly"
+                                  ? "bg-slate-800 text-[#10b981] border border-slate-700/50"
+                                  : "bg-[#07090e] text-slate-400 border border-slate-800"
+                              }`}
+                            >
+                              Mensualidad ($300 MXN)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setManualPaymentConcept("class")}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                manualPaymentConcept === "class"
+                                  ? "bg-slate-800 text-sky-400 border border-slate-700/50"
+                                  : "bg-[#07090e] text-slate-400 border border-slate-800"
+                              }`}
+                            >
+                              Por Clase ($50 MXN)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddForm(false)}
+                        className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer uppercase tracking-wider"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={studentActionLoading}
+                        className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider"
+                      >
+                        {studentActionLoading ? "Guardando..." : "Dar de Alta Estudiante"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="block md:hidden space-y-3 font-sans">
+                  {studentsLoading ? (
+                    <div className="py-8 text-center text-xs text-slate-500 bg-[#07090e]/50 border border-slate-850 rounded-2xl">
+                      Cargando alumnos...
+                    </div>
+                  ) : students.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-500 bg-[#07090e]/50 border border-slate-850 rounded-2xl">
+                      Aún no hay registros
+                    </div>
+                  ) : students.map((student) => (
+                    <div key={student.id} className="bg-[#07090e] border border-slate-850 p-4 rounded-2xl space-y-3 text-left">
+                      <div className="flex justify-between items-start gap-3">
+                        <div>
+                          <h4 className="font-bold text-slate-200 text-xs">{student.name}</h4>
+                          <span className="text-[10px] text-slate-450 block mt-0.5">{student.age || "-"} años</span>
+                          <span className="text-[9px] text-slate-500 block mt-0.5">Estado: {student.status || "sin estado"}</span>
+                        </div>
+                        <span className="bg-[#0e121e] px-2 py-0.5 rounded border border-slate-800 text-[9px] text-slate-350 font-medium">
+                          {student.category || "Sin categoría"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-850/50">
+                        <button type="button" onClick={() => setSelectedStudent(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer">
+                          Excepción
+                        </button>
+                        <button type="button" onClick={() => openLifecycleModal(student)} className="bg-slate-900 border border-slate-800 text-sky-400 hover:text-sky-300 text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer">
+                          Administrar
+                        </button>
+                        {(student.status === "suspended" || student.billingStatus === "pending_payment" || student.status === "on_hold") && (
+                          <button type="button" onClick={() => handleConfirmManualPayment(student.studentId || student.id)} className="bg-amber-500 text-slate-950 hover:bg-amber-600 font-display font-black text-[9px] px-3 py-2 rounded-lg transition-all cursor-pointer">
+                            Pago Manual
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse font-sans">
                     <thead>
                       <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
                         <th className="pb-3">Nombre</th>
+                        <th className="pb-3">Edad</th>
                         <th className="pb-3">Categoría</th>
                         <th className="pb-3">Estado</th>
+                        <th className="pb-3">Asignación</th>
+                        <th className="pb-3 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
-                      {students.map((student) => (
+                      {studentsLoading ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">Cargando alumnos...</td>
+                        </tr>
+                      ) : students.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">Aún no hay registros</td>
+                        </tr>
+                      ) : students.map((student) => (
                         <tr key={student.id} className="text-xs">
                           <td className="py-3 font-bold text-slate-200">{student.name}</td>
-                          <td className="py-3 text-slate-400">{student.category}</td>
-                          <td className="py-3 text-slate-400">{student.status}</td>
+                          <td className="py-3 text-slate-400">{student.age || "-"} años</td>
+                          <td className="py-3 text-slate-400">{student.category || "Sin categoría"}</td>
+                          <td className="py-3 text-slate-400">{student.status || "sin estado"}</td>
+                          <td className="py-3">
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                              student.assignment === "automatic"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-amber-500/10 text-amber-500"
+                            }`}>
+                              {student.assignment === "automatic" ? "Automática" : "Excepción Manual"}
+                            </span>
+                          </td>
+                          <td className="py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button type="button" onClick={() => setSelectedStudent(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer">
+                                Excepción
+                              </button>
+                              {(student.status === "suspended" || student.billingStatus === "pending_payment" || student.status === "on_hold") && (
+                                <button type="button" onClick={() => handleConfirmManualPayment(student.studentId || student.id)} className="bg-amber-500 text-slate-950 hover:bg-amber-600 font-display font-black text-[9px] px-2.5 py-1.5 rounded-lg transition-all cursor-pointer">
+                                  Pago Manual
+                                </button>
+                              )}
+                              <button type="button" onClick={() => openLifecycleModal(student)} className="bg-slate-900 border border-slate-800 text-sky-400 hover:text-sky-300 text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer">
+                                Administrar
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <div className="mt-6 pt-5 border-t border-slate-800 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Asistencias</p>
-                      <p className="text-2xl font-black text-slate-100 mt-1">{attendance.length}</p>
+
+                {selectedStudent && (
+                  <div className="bg-[#07090e] border border-slate-800 p-5 rounded-2xl animate-fade-in space-y-4">
+                    <div className="flex justify-between items-center gap-3">
+                      <div className="flex items-center gap-1.5 text-amber-500">
+                        <Sparkles className="w-4 h-4" />
+                        <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría: {selectedStudent.name}</h3>
+                      </div>
+                      <button type="button" onClick={() => setSelectedStudent(null)} className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase">
+                        Cancelar
+                      </button>
                     </div>
-                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostradas</p>
-                      <p className="text-2xl font-black text-slate-100 mt-1">{filteredAttendance.length}</p>
-                    </div>
-                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
-                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
-                      <p className="text-xs font-bold text-[#10b981] mt-2">
-                        {attendanceLoading ? "Cargando" : "Sincronizado"}
-                      </p>
+                    <form onSubmit={handleApplyOverride} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[8px] text-slate-400 font-bold block mb-1">Nueva categoría</label>
+                        <select required value={newCategory} onChange={(event) => setNewCategory(event.target.value)} className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]">
+                          <option value="">-- Seleccionar --</option>
+                          <option value="Sub-8 Iniciación">Sub-8 Iniciación</option>
+                          <option value="Sub-10 Competitivo">Sub-10 Competitivo</option>
+                          <option value="Sub-12 Elite">Sub-12 Elite</option>
+                          <option value="Sub-15 Avanzado">Sub-15 Avanzado</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[8px] text-slate-400 font-bold block mb-1">Justificación técnica</label>
+                        <input required value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Ej. Nivel superior o solicitud familiar" className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]" />
+                      </div>
+                      <div className="md:col-span-2 flex justify-end">
+                        <button type="submit" disabled={studentActionLoading} className="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed">
+                          {studentActionLoading ? "Guardando..." : "Guardar Excepción"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {managedStudent && (
+                  <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-[#0e121e]/95 border border-slate-800 rounded-3xl shadow-2xl animate-fade-in">
+                      <div className="p-5 sm:p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[9px] font-mono text-sky-400 font-black uppercase tracking-widest block">Ciclo de vida del alumno</span>
+                          <h3 className="font-display font-black text-lg text-slate-100 uppercase tracking-wide mt-1">{managedStudent.name}</h3>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Estado actual: <span className="text-slate-300 font-bold">{managedStudent.status || "Sin estado"}</span></p>
+                        </div>
+                        <button type="button" onClick={closeLifecycleModal} className="self-start sm:self-center bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider">
+                          Cerrar
+                        </button>
+                      </div>
+                      <div className="p-5 sm:p-6 space-y-5">
+                        {lifecycleMessage && (
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 shrink-0" />
+                            <span>{lifecycleMessage}</span>
+                          </div>
+                        )}
+                        {lifecycleError && (
+                          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            <span>{lifecycleError}</span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {Object.entries(lifecycleActions).map(([key, action]) => {
+                            const toneClasses = {
+                              emerald: "border-emerald-500/25 bg-emerald-500/5 text-emerald-400 hover:border-emerald-500/50",
+                              amber: "border-amber-500/25 bg-amber-500/5 text-amber-500 hover:border-amber-500/50",
+                              slate: "border-slate-700 bg-slate-900/50 text-slate-300 hover:border-slate-500",
+                              red: "border-red-500/25 bg-red-500/5 text-red-400 hover:border-red-500/50"
+                            };
+                            return (
+                              <button key={key} type="button" onClick={() => prepareLifecycleAction(key)} className={`text-left border rounded-2xl p-4 transition-all cursor-pointer ${toneClasses[action.tone]} ${pendingLifecycleAction === key ? "ring-1 ring-current" : ""}`}>
+                                <span className="font-display font-black text-xs uppercase tracking-wider block">{action.label}</span>
+                                <span className="text-[10px] text-slate-400 leading-relaxed block mt-2">{action.description}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {pendingLifecycleAction && pendingLifecycleAction !== "delete" && (
+                          <div className="bg-[#07090e]/70 border border-slate-800 rounded-2xl p-4 space-y-4">
+                            <div>
+                              <h4 className="font-display font-black text-xs uppercase tracking-wider text-slate-200">Confirmar: {lifecycleActions[pendingLifecycleAction].label}</h4>
+                              <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">Esta acción actualizará el estado administrativo y conservará historial, pagos, asistencias, evaluaciones, padre y categoría.</p>
+                            </div>
+                            {(pendingLifecycleAction === "suspend" || pendingLifecycleAction === "inactive") && (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <select value={lifecycleReason} onChange={(event) => setLifecycleReason(event.target.value)} className="bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]">
+                                  <option value="">Motivo administrativo opcional</option>
+                                  {lifecycleReasonOptions[pendingLifecycleAction].map((reason) => (
+                                    <option key={reason} value={reason}>{reason}</option>
+                                  ))}
+                                </select>
+                                {lifecycleReason === "Otro" && (
+                                  <input value={lifecycleOtherReason} onChange={(event) => setLifecycleOtherReason(event.target.value)} placeholder="Detalle del motivo" className="bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]" />
+                                )}
+                              </div>
+                            )}
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setPendingLifecycleAction(null)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider">Cancelar</button>
+                              <button type="button" onClick={executeLifecycleStatusAction} disabled={lifecycleLoading} className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider">
+                                {lifecycleLoading ? "Aplicando..." : "Confirmar acción"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {pendingLifecycleAction === "delete" && (
+                          <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 space-y-4">
+                            <div>
+                              <h4 className="font-display font-black text-xs uppercase tracking-wider text-red-400">Eliminación protegida</h4>
+                              <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">El borrado físico está bloqueado si existe cualquier historial o relación. Escriba ELIMINAR para validar la protección.</p>
+                            </div>
+                            {lifecycleHistory && (
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px]">
+                                <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3"><b className="text-slate-200">{lifecycleHistory.payments || 0}</b><br />pagos</div>
+                                <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3"><b className="text-slate-200">{lifecycleHistory.attendance || 0}</b><br />asistencias</div>
+                                <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3"><b className="text-slate-200">{lifecycleHistory.evaluations || 0}</b><br />evaluaciones</div>
+                                <div className="bg-[#07090e] border border-slate-800 rounded-xl p-3"><b className="text-slate-200">{lifecycleHistory.total || 0}</b><br />total</div>
+                              </div>
+                            )}
+                            <input value={lifecycleDeleteText} onChange={(event) => setLifecycleDeleteText(event.target.value)} className="w-full bg-[#0e121e] border border-red-500/20 rounded-xl px-3 py-2 text-xs text-red-300 focus:outline-none focus:border-red-500 font-mono" placeholder="ELIMINAR" />
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setPendingLifecycleAction(null)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-[10px] font-bold px-4 py-2 rounded-xl transition-all cursor-pointer uppercase tracking-wider">Cancelar</button>
+                              <button type="button" onClick={executeProtectedDelete} disabled={lifecycleLoading || lifecycleDeleteText !== "ELIMINAR"} className="bg-red-500 hover:bg-red-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider">
+                                {lifecycleLoading ? "Validando..." : "Validar eliminación"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      type="search"
-                      value={attendanceSearch}
-                      onChange={(event) => setAttendanceSearch(event.target.value)}
-                      placeholder="Buscar asistencia"
-                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
-                    />
-                    <select
-                      value={attendanceStatusFilter}
-                      onChange={(event) => setAttendanceStatusFilter(event.target.value)}
-                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
-                    >
-                      <option value="all">Todos los registros</option>
-                      <option value="present">Con presentes</option>
-                      <option value="absent">Con ausentes</option>
-                    </select>
-                    <select
-                      value={attendanceSort}
-                      onChange={(event) => setAttendanceSort(event.target.value)}
-                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
-                    >
-                      <option value="newest">Más recientes</option>
-                      <option value="oldest">Más antiguos</option>
-                      <option value="records-desc">Más registros</option>
-                      <option value="records-asc">Menos registros</option>
-                    </select>
-                  </div>
-
-                  {attendanceError && (
-                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
-                      {attendanceError}
-                    </div>
-                  )}
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse font-sans">
-                      <thead>
-                        <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          <th className="pb-3">Fecha</th>
-                          <th className="pb-3">Categoría</th>
-                          <th className="pb-3">Registros</th>
-                          <th className="pb-3">Presentes</th>
-                          <th className="pb-3">Ausentes</th>
-                          <th className="pb-3">Documento</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/40">
-                        {attendanceLoading ? (
-                          <tr>
-                            <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
-                              Cargando asistencias...
-                            </td>
-                          </tr>
-                        ) : filteredAttendance.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
-                              No hay asistencias para mostrar.
-                            </td>
-                          </tr>
-                        ) : filteredAttendance.map((entry) => {
-                          const records = Array.isArray(entry.records) ? entry.records : [];
-                          const present = records.filter((record) => (record.status || "").toLowerCase() === "p").length;
-                          const absent = records.filter((record) => (record.status || "").toLowerCase() === "a").length;
-
-                          return (
-                            <tr key={entry.id} className="text-xs">
-                              <td className="py-3 text-slate-200 font-bold">{entry.date || "Sin fecha"}</td>
-                              <td className="py-3 text-slate-400">{entry.category || "Sin categoría"}</td>
-                              <td className="py-3 text-slate-400">{records.length}</td>
-                              <td className="py-3 text-[#10b981] font-bold">{present}</td>
-                              <td className="py-3 text-amber-400 font-bold">{absent}</td>
-                              <td className="py-3 text-slate-500 font-mono text-[10px]">{entry.id}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                )}
               </div>
             ) : activeTab === "billing" ? (
               <div className="pt-4 space-y-4">
