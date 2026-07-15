@@ -18,8 +18,8 @@ export function useAdminPayments() {
   adminStep("ADMIN_PAYMENTS_STAGE_B1_BEFORE_EFFECT");
   useEffect(() => {
     adminStep("ADMIN_PAYMENTS_STAGE_B1_EFFECT_ENTER");
-    const unsubscribe = AdminService.subscribePendingPayments(() => {
-      console.log("snapshot recibido");
+    const unsubscribe = AdminService.subscribePendingPayments((payments) => {
+      setPendingPayments(payments);
     });
 
     return () => {

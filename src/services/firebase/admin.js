@@ -371,7 +371,7 @@ export function subscribePendingPayments(callback) {
   );
 
   const unsubscribe = onSnapshot(q, () => {
-    console.log("payments snapshot received");
+    callback([]);
   });
 
   return unsubscribe;
