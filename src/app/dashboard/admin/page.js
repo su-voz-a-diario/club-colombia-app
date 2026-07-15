@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
+import { calculateLeaderboard } from "@/lib/studentModel";
 
 const tabs = [
   { id: "students", label: "Control de Alumnos y Excepciones", title: "Control de Alumnos" },
@@ -35,6 +36,7 @@ export default function AdminDashboard() {
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
+  const allAttendance = attendance;
   const getTimeValue = (value) => {
     if (!value) return 0;
     if (typeof value?.toDate === "function") return value.toDate().getTime();
@@ -149,6 +151,20 @@ export default function AdminDashboard() {
         return evaluationSort === "oldest" ? aTime - bTime : bTime - aTime;
       });
   }, [evaluationHealthFilter, evaluationSearch, evaluationSort, evaluations]);
+
+  const memoizedLeaderboard = React.useMemo(
+    () => calculateLeaderboard(
+      students,
+      evaluations,
+      allAttendance
+    ),
+    [students, evaluations, allAttendance]
+  );
+
+  console.log(
+    "leaderboard size:",
+    memoizedLeaderboard.length
+  );
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("es-MX", {
