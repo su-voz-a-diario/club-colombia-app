@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { AdminService } from "@/services/admin";
 import { adminStep } from "@/lib/adminDiagnostics";
 
 /**
@@ -10,6 +11,14 @@ export function useAdminEvaluations() {
   const [data] = useState([]);
   const [loading] = useState(false);
   const [error] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = AdminService.subscribeAllEvaluations(() => {});
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   return {
     data,

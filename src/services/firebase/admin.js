@@ -44,22 +44,11 @@ export function subscribeStudentsList(callback) {
  * Suscribe en tiempo real a todas las evaluaciones técnicas.
  */
 export function subscribeAllEvaluations(callback) {
-  adminListenerStarted("ADMIN_STEP_73_FIRESTORE_LISTENER_EVALUATIONS_CREATED", { collection: "evaluations" });
-  const unsubscribe = onSnapshot(collection(db, "evaluations"), (snapshot) => {
-    const list = [];
-    snapshot.forEach((doc) => {
-      list.push({ id: doc.id, ...doc.data() });
-    });
-    adminStep("ADMIN_STEP_74_FIRESTORE_LISTENER_EVALUATIONS_SNAPSHOT", {
-      docsCount: snapshot.size,
-      mappedCount: list.length
-    });
-    callback(list);
+  const unsubscribe = onSnapshot(collection(db, "evaluations"), () => {
+    console.log("evaluations snapshot received");
   });
-  return () => {
-    adminListenerStopped("ADMIN_STEP_75_FIRESTORE_LISTENER_EVALUATIONS_UNSUBSCRIBE", { collection: "evaluations" });
-    unsubscribe();
-  };
+
+  return unsubscribe;
 }
 
 /**
