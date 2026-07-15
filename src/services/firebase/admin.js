@@ -381,6 +381,7 @@ export function subscribePendingPayments(callback) {
     });
 
     console.log("payments array:", pays.length);
+    callback(pays);
   });
 
   return unsubscribe;

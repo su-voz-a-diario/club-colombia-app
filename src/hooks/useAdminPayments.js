@@ -19,7 +19,7 @@ export function useAdminPayments() {
   useEffect(() => {
     adminStep("ADMIN_PAYMENTS_STAGE_B1_EFFECT_ENTER");
     const unsubscribe = AdminService.subscribePendingPayments((payments) => {
-      setPendingPayments(payments);
+      console.log("payments recibidos:", payments.length);
     });
 
     return () => {
