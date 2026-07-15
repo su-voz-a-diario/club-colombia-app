@@ -22,10 +22,19 @@ export default function AdminDashboard() {
   const [paymentSearch, setPaymentSearch] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentSort, setPaymentSort] = useState("newest");
+  const [attendanceSearch, setAttendanceSearch] = useState("");
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState("all");
+  const [attendanceSort, setAttendanceSort] = useState("newest");
   const { data: students } = useAdminStudents();
-  const { data: attendance } = useAdminAttendance();
+  const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
+  const getTimeValue = (value) => {
+    if (!value) return 0;
+    if (typeof value?.toDate === "function") return value.toDate().getTime();
+    return Date.parse(value) || 0;
+  };
+
   const filteredPayments = useMemo(() => {
     const normalizedSearch = paymentSearch.trim().toLowerCase();
 
@@ -51,11 +60,48 @@ export default function AdminDashboard() {
         if (paymentSort === "amount-desc") return Number(b.amount || 0) - Number(a.amount || 0);
         if (paymentSort === "amount-asc") return Number(a.amount || 0) - Number(b.amount || 0);
 
-        const aTime = Date.parse(a.date || a.createdAt?.toDate?.() || "") || 0;
-        const bTime = Date.parse(b.date || b.createdAt?.toDate?.() || "") || 0;
+        const aTime = getTimeValue(a.date) || getTimeValue(a.createdAt);
+        const bTime = getTimeValue(b.date) || getTimeValue(b.createdAt);
         return paymentSort === "oldest" ? aTime - bTime : bTime - aTime;
       });
   }, [paymentSearch, paymentSort, paymentStatusFilter, pendingPayments]);
+
+  const filteredAttendance = useMemo(() => {
+    const normalizedSearch = attendanceSearch.trim().toLowerCase();
+
+    return [...attendance]
+      .filter((entry) => {
+        const records = Array.isArray(entry.records) ? entry.records : [];
+        const hasStatus = (status) => records.some((record) => (record.status || "").toLowerCase() === status);
+
+        if (attendanceStatusFilter === "present" && !hasStatus("p")) return false;
+        if (attendanceStatusFilter === "absent" && !hasStatus("a")) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          entry.id,
+          entry.date,
+          entry.category,
+          entry.studentId,
+          entry.studentName,
+          ...records.flatMap((record) => [record.name, record.status])
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        const aTime = getTimeValue(a.date) || getTimeValue(a.timestamp);
+        const bTime = getTimeValue(b.date) || getTimeValue(b.timestamp);
+        if (attendanceSort === "records-desc") {
+          return (b.records?.length || 0) - (a.records?.length || 0);
+        }
+        if (attendanceSort === "records-asc") {
+          return (a.records?.length || 0) - (b.records?.length || 0);
+        }
+        return attendanceSort === "oldest" ? aTime - bTime : bTime - aTime;
+      });
+  }, [attendance, attendanceSearch, attendanceSort, attendanceStatusFilter]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("es-MX", {
@@ -164,6 +210,104 @@ export default function AdminDashboard() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-6 pt-5 border-t border-slate-800 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Asistencias</p>
+                      <p className="text-2xl font-black text-slate-100 mt-1">{attendance.length}</p>
+                    </div>
+                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostradas</p>
+                      <p className="text-2xl font-black text-slate-100 mt-1">{filteredAttendance.length}</p>
+                    </div>
+                    <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                      <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                      <p className="text-xs font-bold text-[#10b981] mt-2">
+                        {attendanceLoading ? "Cargando" : "Sincronizado"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input
+                      type="search"
+                      value={attendanceSearch}
+                      onChange={(event) => setAttendanceSearch(event.target.value)}
+                      placeholder="Buscar asistencia"
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <select
+                      value={attendanceStatusFilter}
+                      onChange={(event) => setAttendanceStatusFilter(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="all">Todos los registros</option>
+                      <option value="present">Con presentes</option>
+                      <option value="absent">Con ausentes</option>
+                    </select>
+                    <select
+                      value={attendanceSort}
+                      onChange={(event) => setAttendanceSort(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="newest">Más recientes</option>
+                      <option value="oldest">Más antiguos</option>
+                      <option value="records-desc">Más registros</option>
+                      <option value="records-asc">Menos registros</option>
+                    </select>
+                  </div>
+
+                  {attendanceError && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
+                      {attendanceError}
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse font-sans">
+                      <thead>
+                        <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="pb-3">Fecha</th>
+                          <th className="pb-3">Categoría</th>
+                          <th className="pb-3">Registros</th>
+                          <th className="pb-3">Presentes</th>
+                          <th className="pb-3">Ausentes</th>
+                          <th className="pb-3">Documento</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {attendanceLoading ? (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                              Cargando asistencias...
+                            </td>
+                          </tr>
+                        ) : filteredAttendance.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                              No hay asistencias para mostrar.
+                            </td>
+                          </tr>
+                        ) : filteredAttendance.map((entry) => {
+                          const records = Array.isArray(entry.records) ? entry.records : [];
+                          const present = records.filter((record) => (record.status || "").toLowerCase() === "p").length;
+                          const absent = records.filter((record) => (record.status || "").toLowerCase() === "a").length;
+
+                          return (
+                            <tr key={entry.id} className="text-xs">
+                              <td className="py-3 text-slate-200 font-bold">{entry.date || "Sin fecha"}</td>
+                              <td className="py-3 text-slate-400">{entry.category || "Sin categoría"}</td>
+                              <td className="py-3 text-slate-400">{records.length}</td>
+                              <td className="py-3 text-[#10b981] font-bold">{present}</td>
+                              <td className="py-3 text-amber-400 font-bold">{absent}</td>
+                              <td className="py-3 text-slate-500 font-mono text-[10px]">{entry.id}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             ) : activeTab === "billing" ? (

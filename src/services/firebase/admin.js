@@ -65,9 +65,17 @@ export function subscribeAllEvaluations(callback) {
 /**
  * Suscribe en tiempo real a todas las hojas de asistencia consolidadas.
  */
-export function subscribeAllAttendance(callback) {
-  const unsubscribe = onSnapshot(collection(db, "attendance"), () => {
-    console.log("attendance snapshot received");
+export function subscribeAllAttendance(callback, onError) {
+  const unsubscribe = onSnapshot(collection(db, "attendance"), (snapshot) => {
+    const list = [];
+
+    snapshot.forEach((doc) => {
+      list.push({ id: doc.id, ...doc.data() });
+    });
+
+    callback(list);
+  }, (err) => {
+    if (onError) onError(err);
   });
 
   return unsubscribe;

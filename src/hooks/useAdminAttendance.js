@@ -8,12 +8,24 @@ import { adminStep } from "@/lib/adminDiagnostics";
  */
 export function useAdminAttendance() {
   adminStep("ADMIN_STEP_52_USE_ADMIN_ATTENDANCE_RENDER");
-  const [data] = useState([]);
-  const [loading] = useState(false);
-  const [error] = useState(null);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = AdminService.subscribeAllAttendance(() => {});
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = AdminService.subscribeAllAttendance(
+      (attendance) => {
+        setData(attendance);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message || "Error al cargar asistencias");
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubscribe();
