@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { LogOut, Trophy } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
@@ -576,6 +576,119 @@ export default function AdminDashboard() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            ) : activeTab === "leaderboard" ? (
+              <div className="pt-4 space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {memoizedLeaderboard.slice(0, 3).map((item, index) => {
+                    const podiumStyles = [
+                      "border-amber-500/30 bg-amber-500/10 text-amber-300",
+                      "border-slate-500/30 bg-slate-500/10 text-slate-300",
+                      "border-orange-700/30 bg-orange-700/10 text-orange-300"
+                    ];
+                    const podiumLabels = ["1er Lugar", "2do Lugar", "3er Lugar"];
+
+                    return (
+                      <div key={item.id} className={`border rounded-2xl p-4 ${podiumStyles[index]}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[9px] font-black uppercase tracking-wider">{podiumLabels[index]}</span>
+                          <Trophy className="w-4 h-4" />
+                        </div>
+                        <p className="mt-3 text-sm font-black text-slate-100">{item.name}</p>
+                        <p className="mt-1 text-[10px] text-slate-400">{item.category || "Sin categoría"}</p>
+                        <p className="mt-3 text-xs font-mono font-black">
+                          {item.overallPoints !== null ? `${item.overallPoints} pts` : "Sin información"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                  {memoizedLeaderboard.length === 0 && (
+                    <div className="md:col-span-3 bg-[#07090e]/60 border border-slate-800 rounded-2xl p-6 text-center">
+                      <Trophy className="w-6 h-6 text-slate-600 mx-auto mb-2" />
+                      <p className="text-xs text-slate-500">Aún no hay registros para la tabla de honor.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-3">
+                    <div>
+                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                        Tabla de Honor
+                      </h2>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Ranking mensual basado en asistencia (40%) y promedio técnico (60%).
+                      </p>
+                    </div>
+                    <Trophy className="w-5 h-5 text-[#10b981]" />
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse font-sans">
+                      <thead>
+                        <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="pb-3 text-center w-12">Rango</th>
+                          <th className="pb-3">Deportista</th>
+                          <th className="pb-3">Categoría</th>
+                          <th className="pb-3 text-center">Ficha Técnica</th>
+                          <th className="pb-3 text-center">Asistencia</th>
+                          <th className="pb-3 text-right pr-4">Puntaje Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {memoizedLeaderboard.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                              Aún no hay registros
+                            </td>
+                          </tr>
+                        ) : memoizedLeaderboard.map((item, index) => {
+                          const isTop3 = index < 3;
+                          const placeColors = [
+                            "text-amber-400 bg-amber-500/10 border border-amber-500/20",
+                            "text-slate-300 bg-slate-500/10 border border-slate-500/20",
+                            "text-orange-300 bg-orange-700/10 border border-orange-700/20"
+                          ];
+
+                          return (
+                            <tr key={item.id} className="text-xs">
+                              <td className="py-3 text-center font-black">
+                                {isTop3 ? (
+                                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-black text-[10px] ${placeColors[index]}`}>
+                                    {index + 1}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 font-mono">#{index + 1}</span>
+                                )}
+                              </td>
+                              <td className="py-3 font-bold text-slate-200">{item.name}</td>
+                              <td className="py-3 text-slate-400">
+                                <span className="bg-[#07090e] px-2 py-0.5 rounded border border-slate-850 text-[8px] uppercase tracking-wider font-mono">
+                                  {item.category || "Sin categoría"}
+                                </span>
+                              </td>
+                              <td className="py-3 text-center font-mono font-bold text-slate-300">
+                                {item.avgScore !== null ? `${item.avgScore}/10` : "Sin información"}
+                              </td>
+                              <td className="py-3 text-center font-mono font-bold text-[#10b981]">
+                                {item.attendanceRate !== null ? `${item.attendanceRate}%` : "Sin información"}
+                              </td>
+                              <td className="py-3 text-right font-mono font-black text-[#10b981] pr-4">
+                                {item.overallPoints !== null ? (
+                                  <>
+                                    <span className="text-[13px]">{item.overallPoints}</span> pts
+                                  </>
+                                ) : (
+                                  "Sin información"
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             ) : (
