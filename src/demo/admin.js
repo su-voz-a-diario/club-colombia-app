@@ -124,6 +124,16 @@ export async function sendAnnouncement(text) {
   return { success: true };
 }
 
+export async function deleteAnnouncement() {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log("[DEMO MODE] Comunicado eliminado");
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("adminNotice");
+    window.dispatchEvent(new Event("storage"));
+  }
+  return { success: true };
+}
+
 export async function saveDrill(drillData, drillId = null) {
   await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
   console.log(`[DEMO MODE] Drill guardado:`, drillData);

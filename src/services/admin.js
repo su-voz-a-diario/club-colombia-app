@@ -71,6 +71,12 @@ export const AdminService = {
       : FirebaseAdmin.sendAnnouncement(text);
   },
 
+  deleteAnnouncement: () => {
+    return isDemoActive()
+      ? DemoAdmin.deleteAnnouncement()
+      : FirebaseAdmin.deleteAnnouncement();
+  },
+
   saveDrill: (drillData, drillId) => {
     return isDemoActive()
       ? DemoAdmin.saveDrill(drillData, drillId)

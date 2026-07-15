@@ -211,6 +211,25 @@ export async function sendAnnouncement(text) {
 }
 
 /**
+ * Limpia el comunicado global activo.
+ */
+export async function deleteAnnouncement() {
+  const docRef = doc(db, "settings", "announcements");
+  await import("firebase/firestore").then(({ setDoc }) =>
+    setDoc(docRef, {
+      notice: "",
+      date: new Date().toISOString()
+    }, { merge: true })
+  );
+
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("adminNotice");
+  }
+
+  return { success: true };
+}
+
+/**
  * Guarda o actualiza un drill (Video de Entrenamiento).
  */
 export async function saveDrill(drillData, drillId = null) {

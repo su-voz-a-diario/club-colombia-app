@@ -2,8 +2,9 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle, LogOut, Smartphone, Sparkles, Trophy, Users, Video } from "lucide-react";
+import { AlertTriangle, CheckCircle, LogOut, MessageSquare, Pencil, Smartphone, Sparkles, Trash2, Trophy, Users, Video } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
+import { useAdminAnnouncements } from "@/hooks/useAdminAnnouncements";
 import { useAdminDrills } from "@/hooks/useAdminDrills";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
 import { useAdminEvents } from "@/hooks/useAdminEvents";
@@ -73,6 +74,11 @@ export default function AdminDashboard() {
   const [drillSearch, setDrillSearch] = useState("");
   const [drillCategoryFilter, setDrillCategoryFilter] = useState("all");
   const [drillSort, setDrillSort] = useState("title-asc");
+  const [notificationText, setNotificationText] = useState("");
+  const [announcementSearch, setAnnouncementSearch] = useState("");
+  const [announcementStatusFilter, setAnnouncementStatusFilter] = useState("all");
+  const [announcementSort, setAnnouncementSort] = useState("newest");
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
   const [approvingPaymentId, setApprovingPaymentId] = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [newCategory, setNewCategory] = useState("");
@@ -119,6 +125,16 @@ export default function AdminDashboard() {
     deleteEmptyStudent
   } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
+  const {
+    announcements,
+    loading: announcementsLoading,
+    actionLoading: announcementsActionLoading,
+    error: announcementsError,
+    successMessage: announcementsSuccessMessage,
+    sendAnnouncement,
+    deleteAnnouncement,
+    clearMessages: clearAnnouncementMessages
+  } = useAdminAnnouncements();
   const { drills, loading: drillsLoading, error: drillsError } = useAdminDrills();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
   const { events, loading: eventsLoading, error: eventsError } = useAdminEvents();
@@ -349,6 +365,35 @@ export default function AdminDashboard() {
         return String(a.title || "").localeCompare(String(b.title || ""));
       });
   }, [drillCategoryFilter, drillSearch, drillSort, drills]);
+
+  const filteredAnnouncements = useMemo(() => {
+    const normalizedSearch = announcementSearch.trim().toLowerCase();
+
+    return [...announcements]
+      .filter((announcement) => {
+        const hasText = Boolean((announcement.text || "").trim());
+        if (announcementStatusFilter === "active" && !hasText) return false;
+        if (announcementStatusFilter === "empty" && hasText) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          announcement.id,
+          announcement.date,
+          announcement.text
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (announcementSort === "text-asc") return String(a.text || "").localeCompare(String(b.text || ""));
+        if (announcementSort === "text-desc") return String(b.text || "").localeCompare(String(a.text || ""));
+
+        const aTime = getTimeValue(a.date);
+        const bTime = getTimeValue(b.date);
+        return announcementSort === "oldest" ? aTime - bTime : bTime - aTime;
+      });
+  }, [announcementSearch, announcementSort, announcementStatusFilter, announcements]);
 
   const memoizedLeaderboard = React.useMemo(
     () => calculateLeaderboard(
@@ -745,6 +790,47 @@ export default function AdminDashboard() {
       setParentLinkError(err.message || "No fue posible vincular la cuenta padre.");
     } finally {
       setParentLinkSaving(false);
+    }
+  };
+
+  const handleSendNotification = async (event) => {
+    event.preventDefault();
+    if (announcementsActionLoading) return;
+
+    clearAnnouncementMessages();
+    try {
+      await sendAnnouncement(notificationText.trim());
+      setNotificationText("");
+      setEditingAnnouncementId(null);
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const handleEditAnnouncement = (announcement) => {
+    setEditingAnnouncementId(announcement.id);
+    setNotificationText(announcement.text || "");
+    clearAnnouncementMessages();
+  };
+
+  const handleCancelAnnouncementEdit = () => {
+    setEditingAnnouncementId(null);
+    setNotificationText("");
+    clearAnnouncementMessages();
+  };
+
+  const handleDeleteAnnouncement = async () => {
+    if (announcementsActionLoading) return;
+    const confirmed = window.confirm("¿Eliminar el comunicado activo?");
+    if (!confirmed) return;
+
+    clearAnnouncementMessages();
+    try {
+      await deleteAnnouncement();
+      setEditingAnnouncementId(null);
+      setNotificationText("");
+    } catch (err) {
+      // El hook expone el error para la UI.
     }
   };
 
@@ -2067,6 +2153,162 @@ export default function AdminDashboard() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              </div>
+            ) : activeTab === "notifications" ? (
+              <div className="pt-4 space-y-5">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                    Canal de Comunicados de Urgencia
+                  </h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Envía y administra comunicados visibles para las familias del club.
+                  </p>
+                </div>
+
+                {(announcementsError || announcementsSuccessMessage) && (
+                  <div className={`p-3.5 rounded-xl text-xs flex items-center gap-2 ${
+                    announcementsError
+                      ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                      : "bg-[#10b981]/10 border border-[#10b981]/20 text-[#10b981]"
+                  }`}>
+                    {announcementsError ? (
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span>{announcementsError || announcementsSuccessMessage}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSendNotification} className="space-y-4 bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
+                  <div>
+                    <label className="text-[8px] text-slate-400 font-bold block mb-1">MENSAJE A TRANSMITIR</label>
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder="Ej. Atención padres de familia: Debido a fuertes lluvias, los entrenamientos de la tarde quedan cancelados."
+                      value={notificationText}
+                      onChange={(event) => setNotificationText(event.target.value)}
+                      className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3.5 py-3 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#10b981] resize-none"
+                      disabled={announcementsActionLoading}
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-end gap-2">
+                    {editingAnnouncementId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelAnnouncementEdit}
+                        disabled={announcementsActionLoading}
+                        className="bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 text-slate-300 font-display font-bold text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed uppercase tracking-wider"
+                      >
+                        Cancelar Edición
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={announcementsActionLoading || !notificationText.trim()}
+                      className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-6 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      {announcementsActionLoading
+                        ? "Guardando..."
+                        : editingAnnouncementId
+                          ? "Guardar Cambios"
+                          : "Enviar Comunicado Masivo"}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Comunicados</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{announcements.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostrados</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredAnnouncements.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                    <p className="text-xs font-bold text-[#10b981] mt-2">
+                      {announcementsLoading ? "Cargando" : "Sincronizado"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="search"
+                    value={announcementSearch}
+                    onChange={(event) => setAnnouncementSearch(event.target.value)}
+                    placeholder="Buscar comunicado"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                  />
+                  <select
+                    value={announcementStatusFilter}
+                    onChange={(event) => setAnnouncementStatusFilter(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="active">Con mensaje</option>
+                    <option value="empty">Vacíos</option>
+                  </select>
+                  <select
+                    value={announcementSort}
+                    onChange={(event) => setAnnouncementSort(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="newest">Más recientes</option>
+                    <option value="oldest">Más antiguos</option>
+                    <option value="text-asc">Texto A-Z</option>
+                    <option value="text-desc">Texto Z-A</option>
+                  </select>
+                </div>
+
+                <div className="space-y-3">
+                  {announcementsLoading ? (
+                    <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-6 rounded-xl">
+                      Cargando comunicados...
+                    </div>
+                  ) : filteredAnnouncements.length === 0 ? (
+                    <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-6 rounded-xl">
+                      No hay comunicados para mostrar.
+                    </div>
+                  ) : filteredAnnouncements.map((announcement) => (
+                    <article key={announcement.id} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-mono uppercase tracking-wider">
+                            {announcement.date || "Sin fecha"}
+                          </p>
+                          <p className="text-xs text-slate-200 leading-relaxed mt-2">
+                            {announcement.text || "Sin comunicado activo"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleEditAnnouncement(announcement)}
+                            className="bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300 text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDeleteAnnouncement}
+                            disabled={announcementsActionLoading}
+                            className="bg-slate-900 border border-slate-800 text-red-400 hover:text-red-300 disabled:text-slate-600 text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
                 </div>
               </div>
             ) : (
