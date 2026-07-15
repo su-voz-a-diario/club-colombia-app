@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LogOut, Trophy } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
+import { useAdminEvents } from "@/hooks/useAdminEvents";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
 import { calculateLeaderboard } from "@/lib/studentModel";
@@ -31,9 +32,13 @@ export default function AdminDashboard() {
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [evaluationHealthFilter, setEvaluationHealthFilter] = useState("all");
   const [evaluationSort, setEvaluationSort] = useState("newest");
+  const [eventSearch, setEventSearch] = useState("");
+  const [eventTypeFilter, setEventTypeFilter] = useState("all");
+  const [eventSort, setEventSort] = useState("date-asc");
   const { data: students } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
+  const { events, loading: eventsLoading, error: eventsError } = useAdminEvents();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
   const allAttendance = attendance;
@@ -151,6 +156,43 @@ export default function AdminDashboard() {
         return evaluationSort === "oldest" ? aTime - bTime : bTime - aTime;
       });
   }, [evaluationHealthFilter, evaluationSearch, evaluationSort, evaluations]);
+
+  const filteredEvents = useMemo(() => {
+    const normalizedSearch = eventSearch.trim().toLowerCase();
+
+    return [...events]
+      .filter((event) => {
+        const eventType = event.type || "training";
+        if (eventTypeFilter !== "all" && eventType !== eventTypeFilter) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          event.id,
+          event.title,
+          event.type,
+          event.date,
+          event.time,
+          event.location,
+          event.category,
+          event.description
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (eventSort === "title-asc") return String(a.title || "").localeCompare(String(b.title || ""));
+        if (eventSort === "title-desc") return String(b.title || "").localeCompare(String(a.title || ""));
+
+        const aTime = getTimeValue(a.date);
+        const bTime = getTimeValue(b.date);
+        if (aTime !== bTime) return eventSort === "date-desc" ? bTime - aTime : aTime - bTime;
+
+        return eventSort === "date-desc"
+          ? String(b.time || "").localeCompare(String(a.time || ""))
+          : String(a.time || "").localeCompare(String(b.time || ""));
+      });
+  }, [eventSearch, eventSort, eventTypeFilter, events]);
 
   const memoizedLeaderboard = React.useMemo(
     () => calculateLeaderboard(
@@ -574,6 +616,143 @@ export default function AdminDashboard() {
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : activeTab === "schedules" ? (
+              <div className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Eventos</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{events.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostrados</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredEvents.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                    <p className="text-xs font-bold text-[#10b981] mt-2">
+                      {eventsLoading ? "Cargando" : "Sincronizado"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="search"
+                    value={eventSearch}
+                    onChange={(event) => setEventSearch(event.target.value)}
+                    placeholder="Buscar evento"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                  />
+                  <select
+                    value={eventTypeFilter}
+                    onChange={(event) => setEventTypeFilter(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="all">Todos los tipos</option>
+                    <option value="training">Entrenamiento</option>
+                    <option value="match">Partido</option>
+                    <option value="meeting">Reunión</option>
+                    <option value="other">Otro</option>
+                  </select>
+                  <select
+                    value={eventSort}
+                    onChange={(event) => setEventSort(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="date-asc">Fecha ascendente</option>
+                    <option value="date-desc">Fecha descendente</option>
+                    <option value="title-asc">Título A-Z</option>
+                    <option value="title-desc">Título Z-A</option>
+                  </select>
+                </div>
+
+                {eventsError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
+                    {eventsError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {eventsLoading ? (
+                    <div className="md:col-span-2 py-8 text-center text-xs text-slate-500">
+                      Cargando eventos...
+                    </div>
+                  ) : filteredEvents.length === 0 ? (
+                    <div className="md:col-span-2 py-8 text-center text-xs text-slate-500">
+                      No hay eventos para mostrar.
+                    </div>
+                  ) : filteredEvents.map((event) => (
+                    <article key={event.id} className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-100">{event.title || "Evento sin título"}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">{event.description || "Sin descripción"}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[9px] font-black uppercase shrink-0">
+                          {event.type || "training"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-4 text-[10px]">
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Fecha</p>
+                          <p className="text-slate-300 font-mono mt-1">{event.date || "Sin fecha"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Hora</p>
+                          <p className="text-slate-300 font-mono mt-1">{event.time || "Sin hora"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Categoría</p>
+                          <p className="text-slate-300 mt-1">{event.category || "Todas"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Lugar</p>
+                          <p className="text-slate-300 mt-1">{event.location || "Sin sede"}</p>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans">
+                    <thead>
+                      <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="pb-3">Fecha</th>
+                        <th className="pb-3">Hora</th>
+                        <th className="pb-3">Evento</th>
+                        <th className="pb-3">Tipo</th>
+                        <th className="pb-3">Categoría</th>
+                        <th className="pb-3">Lugar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {eventsLoading ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                            Cargando calendario...
+                          </td>
+                        </tr>
+                      ) : filteredEvents.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                            No hay eventos para mostrar.
+                          </td>
+                        </tr>
+                      ) : filteredEvents.map((event) => (
+                        <tr key={event.id} className="text-xs">
+                          <td className="py-3 text-slate-500 font-mono text-[10px]">{event.date || "Sin fecha"}</td>
+                          <td className="py-3 text-slate-500 font-mono text-[10px]">{event.time || "Sin hora"}</td>
+                          <td className="py-3 font-bold text-slate-200">{event.title || "Evento sin título"}</td>
+                          <td className="py-3 text-slate-400">{event.type || "training"}</td>
+                          <td className="py-3 text-slate-400">{event.category || "Todas"}</td>
+                          <td className="py-3 text-slate-400">{event.location || "Sin sede"}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
