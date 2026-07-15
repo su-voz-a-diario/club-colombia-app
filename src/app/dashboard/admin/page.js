@@ -89,11 +89,39 @@ export default function AdminDashboard() {
                 Diagnóstico temporal: layout y navegación cargados correctamente.
               </p>
             </div>
-            <div className="h-64 flex items-center justify-center text-center">
-              <p className="text-xs text-slate-500 max-w-sm">
-                Cantidad de alumnos: {students.length}
-              </p>
-            </div>
+            {activeTab === "students" ? (
+              <div className="pt-4">
+                <p className="text-xs text-slate-500 mb-3">
+                  Cantidad de alumnos: {students.length}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans">
+                    <thead>
+                      <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="pb-3">Nombre</th>
+                        <th className="pb-3">Categoría</th>
+                        <th className="pb-3">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {students.map((student) => (
+                        <tr key={student.id} className="text-xs">
+                          <td className="py-3 font-bold text-slate-200">{student.name}</td>
+                          <td className="py-3 text-slate-400">{student.category}</td>
+                          <td className="py-3 text-slate-400">{student.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-center">
+                <p className="text-xs text-slate-500 max-w-sm">
+                  El contenido administrativo de esta pestaña permanece desactivado durante esta etapa.
+                </p>
+              </div>
+            )}
           </section>
         </main>
       </div>
