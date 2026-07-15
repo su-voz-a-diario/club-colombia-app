@@ -365,7 +365,12 @@ export async function confirmManualPayment(studentIdOrName) {
  */
 export function subscribePendingPayments(callback) {
   const paymentsRef = collection(db, "payments");
-  console.log("paymentsRef creada", paymentsRef.path);
+  const q = query(
+    paymentsRef,
+    where("status", "==", "pending")
+  );
+
+  console.log("query creada", q);
 
   return () => {};
 }
