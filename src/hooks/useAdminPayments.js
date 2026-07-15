@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AdminService } from "@/services/admin";
 import { adminStep } from "@/lib/adminDiagnostics";
 
@@ -15,7 +15,18 @@ export function useAdminPayments() {
   const [successMessage, setSuccessMessage] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
-  adminStep("ADMIN_PAYMENTS_STAGE_A_STATES_ONLY");
+  adminStep("ADMIN_PAYMENTS_STAGE_B1_BEFORE_EFFECT");
+  useEffect(() => {
+    adminStep("ADMIN_PAYMENTS_STAGE_B1_EFFECT_ENTER");
+    const unsubscribe = AdminService.subscribePendingPayments(() => {
+      console.log("snapshot recibido");
+    });
+
+    return () => {
+      adminStep("ADMIN_PAYMENTS_STAGE_B1_CLEANUP");
+      unsubscribe();
+    };
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
   const clearSuccessMessage = useCallback(() => setSuccessMessage(""), []);
