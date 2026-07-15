@@ -18,9 +18,19 @@ export function useAdminPayments() {
   adminStep("ADMIN_PAYMENTS_STAGE_B1_BEFORE_EFFECT");
   useEffect(() => {
     adminStep("ADMIN_PAYMENTS_STAGE_B1_EFFECT_ENTER");
-    const unsubscribe = AdminService.subscribePendingPayments((payments) => {
-      setPendingPayments(payments);
-    });
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = AdminService.subscribePendingPayments(
+      (payments) => {
+        setPendingPayments(payments);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message || "Error al cargar pagos pendientes");
+        setLoading(false);
+      }
+    );
 
     return () => {
       adminStep("ADMIN_PAYMENTS_STAGE_B1_CLEANUP");

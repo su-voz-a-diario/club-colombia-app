@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
@@ -18,9 +18,50 @@ const tabs = [
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("students");
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [paymentSort, setPaymentSort] = useState("newest");
   const { data: students } = useAdminStudents();
-  const { pendingPayments } = useAdminPayments();
+  const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
+  const filteredPayments = useMemo(() => {
+    const normalizedSearch = paymentSearch.trim().toLowerCase();
+
+    return [...pendingPayments]
+      .filter((payment) => {
+        const status = payment.status || "pending";
+        if (paymentStatusFilter !== "all" && status !== paymentStatusFilter) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          payment.studentName,
+          payment.categoryName,
+          payment.paymentType,
+          payment.studentId,
+          payment.id,
+          payment.date
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (paymentSort === "amount-desc") return Number(b.amount || 0) - Number(a.amount || 0);
+        if (paymentSort === "amount-asc") return Number(a.amount || 0) - Number(b.amount || 0);
+
+        const aTime = Date.parse(a.date || a.createdAt?.toDate?.() || "") || 0;
+        const bTime = Date.parse(b.date || b.createdAt?.toDate?.() || "") || 0;
+        return paymentSort === "oldest" ? aTime - bTime : bTime - aTime;
+      });
+  }, [paymentSearch, paymentSort, paymentStatusFilter, pendingPayments]);
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+      maximumFractionDigits: 0
+    }).format(Number(amount || 0));
+  };
 
   return (
     <div className="min-h-screen bg-[#07090e] flex flex-col">
@@ -114,6 +155,103 @@ export default function AdminDashboard() {
                           <td className="py-3 font-bold text-slate-200">{student.name}</td>
                           <td className="py-3 text-slate-400">{student.category}</td>
                           <td className="py-3 text-slate-400">{student.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : activeTab === "billing" ? (
+              <div className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Pendientes</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{pendingPayments.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostrados</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredPayments.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                    <p className="text-xs font-bold text-[#10b981] mt-2">
+                      {paymentsLoading ? "Cargando" : "Sincronizado"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="search"
+                    value={paymentSearch}
+                    onChange={(event) => setPaymentSearch(event.target.value)}
+                    placeholder="Buscar pago"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                  />
+                  <select
+                    value={paymentStatusFilter}
+                    onChange={(event) => setPaymentStatusFilter(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="pending">Pendiente</option>
+                    <option value="on_hold">En espera</option>
+                  </select>
+                  <select
+                    value={paymentSort}
+                    onChange={(event) => setPaymentSort(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="newest">Más recientes</option>
+                    <option value="oldest">Más antiguos</option>
+                    <option value="amount-desc">Monto mayor</option>
+                    <option value="amount-asc">Monto menor</option>
+                  </select>
+                </div>
+
+                {paymentsError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
+                    {paymentsError}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans">
+                    <thead>
+                      <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="pb-3">Alumno</th>
+                        <th className="pb-3">Categoría</th>
+                        <th className="pb-3">Monto</th>
+                        <th className="pb-3">Tipo</th>
+                        <th className="pb-3">Fecha</th>
+                        <th className="pb-3">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {paymentsLoading ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                            Cargando pagos pendientes...
+                          </td>
+                        </tr>
+                      ) : filteredPayments.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                            No hay pagos pendientes para mostrar.
+                          </td>
+                        </tr>
+                      ) : filteredPayments.map((payment) => (
+                        <tr key={payment.id} className="text-xs">
+                          <td className="py-3 font-bold text-slate-200">{payment.studentName || "Sin nombre"}</td>
+                          <td className="py-3 text-slate-400">{payment.categoryName || "Sin categoría"}</td>
+                          <td className="py-3 text-red-400 font-bold">{formatCurrency(payment.amount)}</td>
+                          <td className="py-3 text-slate-400">{payment.paymentType || "Mensualidad"}</td>
+                          <td className="py-3 text-slate-500 font-mono text-[10px]">{payment.date || "Sin fecha"}</td>
+                          <td className="py-3">
+                            <span className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[9px] font-black uppercase">
+                              {payment.status || "pending"}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

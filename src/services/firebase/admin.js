@@ -363,7 +363,7 @@ export async function confirmManualPayment(studentIdOrName) {
 /**
  * Suscribe en tiempo real a los pagos en estado "pending".
  */
-export function subscribePendingPayments(callback) {
+export function subscribePendingPayments(callback, onError) {
   const paymentsRef = collection(db, "payments");
   const q = query(
     paymentsRef,
@@ -380,8 +380,9 @@ export function subscribePendingPayments(callback) {
       });
     });
 
-    console.log("payments array:", pays.length);
     callback(pays);
+  }, (err) => {
+    if (onError) onError(err);
   });
 
   return unsubscribe;
