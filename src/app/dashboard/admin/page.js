@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
 
 const tabs = [
@@ -18,6 +19,7 @@ const tabs = [
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("students");
   const { data: students } = useAdminStudents();
+  const { pendingPayments } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
 
   return (
@@ -91,6 +93,9 @@ export default function AdminDashboard() {
             </div>
             {activeTab === "students" ? (
               <div className="pt-4">
+                <p className="text-xs text-slate-500 mb-3">
+                  Pagos pendientes: {pendingPayments.length}
+                </p>
                 <p className="text-xs text-slate-500 mb-3">
                   Cantidad de alumnos: {students.length}
                 </p>
