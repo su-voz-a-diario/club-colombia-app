@@ -2,8 +2,9 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { LogOut, Trophy } from "lucide-react";
+import { LogOut, Trophy, Video } from "lucide-react";
 import { useAdminAttendance } from "@/hooks/useAdminAttendance";
+import { useAdminDrills } from "@/hooks/useAdminDrills";
 import { useAdminEvaluations } from "@/hooks/useAdminEvaluations";
 import { useAdminEvents } from "@/hooks/useAdminEvents";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
@@ -35,8 +36,12 @@ export default function AdminDashboard() {
   const [eventSearch, setEventSearch] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [eventSort, setEventSort] = useState("date-asc");
+  const [drillSearch, setDrillSearch] = useState("");
+  const [drillCategoryFilter, setDrillCategoryFilter] = useState("all");
+  const [drillSort, setDrillSort] = useState("title-asc");
   const { data: students } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
+  const { drills, loading: drillsLoading, error: drillsError } = useAdminDrills();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
   const { events, loading: eventsLoading, error: eventsError } = useAdminEvents();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
@@ -193,6 +198,61 @@ export default function AdminDashboard() {
           : String(a.time || "").localeCompare(String(b.time || ""));
       });
   }, [eventSearch, eventSort, eventTypeFilter, events]);
+
+  const parseVideoUrl = (url) => {
+    if (!url) return { type: "unknown", embedUrl: "" };
+    const trimmed = url.trim();
+    const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/;
+    const ytMatch = trimmed.match(ytRegex);
+    if (ytMatch && ytMatch[1]) {
+      return {
+        type: "youtube",
+        embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}`
+      };
+    }
+    const vimeoRegex = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/;
+    const vimeoMatch = trimmed.match(vimeoRegex);
+    if (vimeoMatch && vimeoMatch[1]) {
+      return {
+        type: "vimeo",
+        embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}`
+      };
+    }
+    return {
+      type: "mp4",
+      embedUrl: trimmed
+    };
+  };
+
+  const filteredDrills = useMemo(() => {
+    const normalizedSearch = drillSearch.trim().toLowerCase();
+
+    return [...drills]
+      .filter((drill) => {
+        const category = drill.category || "sin categoría";
+        if (drillCategoryFilter !== "all" && category !== drillCategoryFilter) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          drill.id,
+          drill.title,
+          drill.description,
+          drill.category,
+          drill.videoUrl,
+          drill.date
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (drillSort === "title-desc") return String(b.title || "").localeCompare(String(a.title || ""));
+        if (drillSort === "category-asc") return String(a.category || "").localeCompare(String(b.category || ""));
+        if (drillSort === "category-desc") return String(b.category || "").localeCompare(String(a.category || ""));
+
+        return String(a.title || "").localeCompare(String(b.title || ""));
+      });
+  }, [drillCategoryFilter, drillSearch, drillSort, drills]);
 
   const memoizedLeaderboard = React.useMemo(
     () => calculateLeaderboard(
@@ -756,6 +816,139 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : activeTab === "drills" ? (
+              <div className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Ejercicios</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{drills.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostrados</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredDrills.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                    <p className="text-xs font-bold text-[#10b981] mt-2">
+                      {drillsLoading ? "Cargando" : "Sincronizado"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="search"
+                    value={drillSearch}
+                    onChange={(event) => setDrillSearch(event.target.value)}
+                    placeholder="Buscar ejercicio"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                  />
+                  <select
+                    value={drillCategoryFilter}
+                    onChange={(event) => setDrillCategoryFilter(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="all">Todas las categorías</option>
+                    <option value="técnica">Técnica individual</option>
+                    <option value="físico">Físico y coordinación</option>
+                    <option value="táctica">Táctica de juego</option>
+                  </select>
+                  <select
+                    value={drillSort}
+                    onChange={(event) => setDrillSort(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="title-asc">Título A-Z</option>
+                    <option value="title-desc">Título Z-A</option>
+                    <option value="category-asc">Categoría A-Z</option>
+                    <option value="category-desc">Categoría Z-A</option>
+                  </select>
+                </div>
+
+                {drillsError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
+                    {drillsError}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <Video className="w-4 h-4 text-[#10b981]" />
+                  <div>
+                    <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                      Videos de la Biblioteca
+                    </h2>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Ejercicios y recursos multimedia disponibles para seguimiento deportivo.
+                    </p>
+                  </div>
+                </div>
+
+                {drillsLoading ? (
+                  <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-6 rounded-xl font-sans">
+                    Cargando biblioteca de ejercicios...
+                  </div>
+                ) : filteredDrills.length === 0 ? (
+                  <div className="text-center text-xs text-slate-500 bg-[#07090e]/40 p-6 rounded-xl font-sans">
+                    No hay videos en la biblioteca.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {filteredDrills.map((drill) => (
+                      <div
+                        key={drill.id}
+                        className="bg-[#07090e]/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between gap-3 text-left animate-fade-in"
+                      >
+                        <div>
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="text-[8px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-400 uppercase tracking-wider">
+                              {drill.category || "Sin categoría"}
+                            </span>
+                            <span className="text-[8px] font-mono text-slate-600">
+                              {drill.date || ""}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-slate-200 text-xs mt-1.5">
+                            {drill.title || "Ejercicio sin título"}
+                          </h4>
+                          <p className="text-[10px] text-slate-450 mt-1 line-clamp-2 leading-relaxed font-sans">
+                            {drill.description || "Sin descripción"}
+                          </p>
+                        </div>
+                        {(() => {
+                          const videoInfo = parseVideoUrl(drill.videoUrl);
+                          if (videoInfo.type === "youtube" || videoInfo.type === "vimeo") {
+                            return (
+                              <iframe
+                                src={videoInfo.embedUrl}
+                                title={drill.title || "Video de entrenamiento"}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video"
+                              />
+                            );
+                          }
+
+                          if (videoInfo.embedUrl) {
+                            return (
+                              <video
+                                src={videoInfo.embedUrl}
+                                className="w-full rounded-lg bg-slate-950 aspect-video object-cover"
+                                controls
+                              />
+                            );
+                          }
+
+                          return (
+                            <div className="w-full rounded-xl bg-slate-950 border border-slate-900 aspect-video flex items-center justify-center text-[10px] text-slate-600">
+                              Video no disponible
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : activeTab === "leaderboard" ? (
               <div className="pt-4 space-y-5">
