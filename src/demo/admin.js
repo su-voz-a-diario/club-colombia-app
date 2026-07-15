@@ -101,10 +101,14 @@ export async function deleteEmptyStudent(student) {
 }
 
 export async function createEvent(eventData) {
+  return saveEvent(eventData);
+}
+
+export async function saveEvent(eventData, eventId = null) {
   await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
-  console.log(`[DEMO MODE] Evento creado:`, eventData);
-  const eventId = eventData.title ? eventData.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "demo-event";
-  return { success: true, eventId };
+  console.log(`[DEMO MODE] Evento guardado:`, eventData);
+  const finalId = eventId || (eventData.title ? eventData.title.toLowerCase().replace(/[^a-z0-9]/g, "-") : "demo-event");
+  return { success: true, eventId: finalId };
 }
 
 export async function deleteEvent(eventId) {

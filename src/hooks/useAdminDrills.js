@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { AdminService } from "@/services/admin";
 import { AttendanceService } from "@/services/attendance";
 import { adminStep } from "@/lib/adminDiagnostics";
 
@@ -13,6 +14,8 @@ export function useAdminDrills() {
   const [drills, setDrills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   adminStep("ADMIN_STEP_65_USE_ADMIN_DRILLS_BEFORE_EFFECT");
   useEffect(() => {
@@ -42,10 +45,54 @@ export function useAdminDrills() {
     }
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setError(null);
+    setSuccessMessage("");
+  }, []);
+
+  const saveDrill = useCallback(async (drillData, drillId = null) => {
+    setActionLoading(true);
+    clearMessages();
+
+    try {
+      const result = await AdminService.saveDrill(drillData, drillId);
+      setSuccessMessage(drillId ? "Ejercicio actualizado correctamente." : "Ejercicio creado correctamente.");
+      return result;
+    } catch (err) {
+      const message = err?.message || "No fue posible guardar el ejercicio.";
+      setError(message);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, [clearMessages]);
+
+  const deleteDrill = useCallback(async (drillId) => {
+    setActionLoading(true);
+    clearMessages();
+
+    try {
+      const result = await AdminService.deleteDrill(drillId);
+      setSuccessMessage("Ejercicio eliminado correctamente.");
+      return result;
+    } catch (err) {
+      const message = err?.message || "No fue posible eliminar el ejercicio.";
+      setError(message);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, [clearMessages]);
+
   return {
     drills,
     loading,
-    error
+    error,
+    actionLoading,
+    successMessage,
+    saveDrill,
+    deleteDrill,
+    clearMessages
   };
 }
 export default useAdminDrills;

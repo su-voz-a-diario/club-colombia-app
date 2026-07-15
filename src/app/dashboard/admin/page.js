@@ -71,9 +71,22 @@ export default function AdminDashboard() {
   const [eventSearch, setEventSearch] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [eventSort, setEventSort] = useState("date-asc");
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventType, setEventType] = useState("training");
+  const [eventDate, setEventDate] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  const [eventCategory, setEventCategory] = useState("Todas");
+  const [eventDescription, setEventDescription] = useState("");
+  const [editingEventId, setEditingEventId] = useState(null);
   const [drillSearch, setDrillSearch] = useState("");
   const [drillCategoryFilter, setDrillCategoryFilter] = useState("all");
   const [drillSort, setDrillSort] = useState("title-asc");
+  const [drillTitle, setDrillTitle] = useState("");
+  const [drillDescription, setDrillDescription] = useState("");
+  const [drillCategory, setDrillCategory] = useState("técnica");
+  const [drillVideoUrl, setDrillVideoUrl] = useState("");
+  const [editingDrillId, setEditingDrillId] = useState(null);
   const [notificationText, setNotificationText] = useState("");
   const [announcementSearch, setAnnouncementSearch] = useState("");
   const [announcementStatusFilter, setAnnouncementStatusFilter] = useState("all");
@@ -135,9 +148,27 @@ export default function AdminDashboard() {
     deleteAnnouncement,
     clearMessages: clearAnnouncementMessages
   } = useAdminAnnouncements();
-  const { drills, loading: drillsLoading, error: drillsError } = useAdminDrills();
+  const {
+    drills,
+    loading: drillsLoading,
+    error: drillsError,
+    actionLoading: drillsActionLoading,
+    successMessage: drillsSuccessMessage,
+    saveDrill,
+    deleteDrill,
+    clearMessages: clearDrillMessages
+  } = useAdminDrills();
   const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
-  const { events, loading: eventsLoading, error: eventsError } = useAdminEvents();
+  const {
+    events,
+    loading: eventsLoading,
+    error: eventsError,
+    actionLoading: eventsActionLoading,
+    successMessage: eventsSuccessMessage,
+    saveEvent,
+    deleteEvent,
+    clearMessages: clearEventMessages
+  } = useAdminEvents();
   const {
     updatePhone,
     loading: phoneUpdating,
@@ -829,6 +860,120 @@ export default function AdminDashboard() {
       await deleteAnnouncement();
       setEditingAnnouncementId(null);
       setNotificationText("");
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const resetEventForm = () => {
+    setEventTitle("");
+    setEventType("training");
+    setEventDate("");
+    setEventTime("");
+    setEventLocation("");
+    setEventCategory("Todas");
+    setEventDescription("");
+    setEditingEventId(null);
+  };
+
+  const handleSaveEvent = async (event) => {
+    event.preventDefault();
+    if (eventsActionLoading) return;
+
+    try {
+      await saveEvent({
+        title: eventTitle.trim(),
+        type: eventType,
+        date: eventDate,
+        time: eventTime,
+        location: eventLocation.trim(),
+        category: eventCategory,
+        description: eventDescription.trim()
+      }, editingEventId);
+      resetEventForm();
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const handleEditEvent = (event) => {
+    setEditingEventId(event.id);
+    setEventTitle(event.title || "");
+    setEventType(event.type || "training");
+    setEventDate(event.date || "");
+    setEventTime(event.time || "");
+    setEventLocation(event.location || "");
+    setEventCategory(event.category || "Todas");
+    setEventDescription(event.description || "");
+    clearEventMessages();
+  };
+
+  const handleCancelEventEdit = () => {
+    resetEventForm();
+    clearEventMessages();
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    if (eventsActionLoading || !eventId) return;
+    const confirmed = window.confirm("¿Eliminar este evento del calendario?");
+    if (!confirmed) return;
+
+    try {
+      await deleteEvent(eventId);
+      if (editingEventId === eventId) resetEventForm();
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const resetDrillForm = () => {
+    setDrillTitle("");
+    setDrillDescription("");
+    setDrillCategory("técnica");
+    setDrillVideoUrl("");
+    setEditingDrillId(null);
+  };
+
+  const handleSaveDrill = async (event) => {
+    event.preventDefault();
+    if (drillsActionLoading) return;
+
+    try {
+      await saveDrill({
+        title: drillTitle.trim(),
+        description: drillDescription.trim(),
+        category: drillCategory,
+        videoUrl: drillVideoUrl.trim(),
+        date: new Date().toISOString().slice(0, 10)
+      }, editingDrillId);
+      resetDrillForm();
+    } catch (err) {
+      // El hook expone el error para la UI.
+    }
+  };
+
+  const handleEditDrill = (drill) => {
+    setEditingDrillId(drill.id);
+    setDrillTitle(drill.title || "");
+    setDrillDescription(drill.description || "");
+    setDrillCategory(drill.category || "técnica");
+    setDrillVideoUrl(drill.videoUrl || "");
+    clearDrillMessages();
+  };
+
+  const handleCancelDrillEdit = () => {
+    resetDrillForm();
+    clearDrillMessages();
+  };
+
+  const handleDeleteDrill = async (drillId) => {
+    if (drillsActionLoading || !drillId) return;
+    const confirmed = window.confirm("¿Eliminar este ejercicio de la biblioteca?");
+    if (!confirmed) return;
+
+    try {
+      await deleteDrill(drillId);
+      if (editingDrillId === drillId) resetDrillForm();
     } catch (err) {
       // El hook expone el error para la UI.
     }
@@ -1791,6 +1936,94 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                <form onSubmit={handleSaveEvent} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                        {editingEventId ? "Editar evento" : "Crear evento"}
+                      </h2>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        El calendario se actualiza automáticamente mediante el listener existente.
+                      </p>
+                    </div>
+                    {editingEventId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEventEdit}
+                        className="px-3 py-2 rounded-xl border border-slate-800 text-slate-400 text-[10px] font-black uppercase hover:text-slate-200 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <input
+                      type="text"
+                      value={eventTitle}
+                      onChange={(event) => setEventTitle(event.target.value)}
+                      placeholder="Título del evento"
+                      required
+                      className="md:col-span-2 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <select
+                      value={eventType}
+                      onChange={(event) => setEventType(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="training">Entrenamiento</option>
+                      <option value="match">Partido</option>
+                      <option value="meeting">Reunión</option>
+                      <option value="other">Otro</option>
+                    </select>
+                    <select
+                      value={eventCategory}
+                      onChange={(event) => setEventCategory(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="Todas">Todas</option>
+                      <option value="Sub-8 Iniciación">Sub-8 Iniciación</option>
+                      <option value="Sub-10 Competitivo">Sub-10 Competitivo</option>
+                      <option value="Sub-12 Elite">Sub-12 Elite</option>
+                      <option value="Sub-15 Avanzado">Sub-15 Avanzado</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      onChange={(event) => setEventDate(event.target.value)}
+                      required
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    />
+                    <input
+                      type="time"
+                      value={eventTime}
+                      onChange={(event) => setEventTime(event.target.value)}
+                      required
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    />
+                    <input
+                      type="text"
+                      value={eventLocation}
+                      onChange={(event) => setEventLocation(event.target.value)}
+                      placeholder="Lugar"
+                      className="md:col-span-2 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <textarea
+                      value={eventDescription}
+                      onChange={(event) => setEventDescription(event.target.value)}
+                      placeholder="Descripción"
+                      rows={3}
+                      className="md:col-span-4 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981] resize-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={eventsActionLoading}
+                    className="px-4 py-2 rounded-xl bg-[#10b981] text-slate-950 text-[10px] font-black uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {eventsActionLoading ? "Guardando..." : editingEventId ? "Guardar Cambios" : "Crear Evento"}
+                  </button>
+                </form>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <input
                     type="search"
@@ -1825,6 +2058,12 @@ export default function AdminDashboard() {
                 {eventsError && (
                   <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
                     {eventsError}
+                  </div>
+                )}
+
+                {eventsSuccessMessage && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs">
+                    {eventsSuccessMessage}
                   </div>
                 )}
 
@@ -1866,6 +2105,26 @@ export default function AdminDashboard() {
                           <p className="text-slate-300 mt-1">{event.location || "Sin sede"}</p>
                         </div>
                       </div>
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={() => handleEditEvent(event)}
+                          disabled={eventsActionLoading}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-black uppercase hover:text-white transition-all disabled:opacity-50"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEvent(event.id)}
+                          disabled={eventsActionLoading}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-black uppercase hover:bg-red-500/20 transition-all disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Eliminar
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -1880,18 +2139,19 @@ export default function AdminDashboard() {
                         <th className="pb-3">Tipo</th>
                         <th className="pb-3">Categoría</th>
                         <th className="pb-3">Lugar</th>
+                        <th className="pb-3 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
                       {eventsLoading ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
                             Cargando calendario...
                           </td>
                         </tr>
                       ) : filteredEvents.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
                             No hay eventos para mostrar.
                           </td>
                         </tr>
@@ -1903,6 +2163,28 @@ export default function AdminDashboard() {
                           <td className="py-3 text-slate-400">{event.type || "training"}</td>
                           <td className="py-3 text-slate-400">{event.category || "Todas"}</td>
                           <td className="py-3 text-slate-400">{event.location || "Sin sede"}</td>
+                          <td className="py-3">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditEvent(event)}
+                                disabled={eventsActionLoading}
+                                className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 transition-all disabled:opacity-50"
+                                aria-label="Editar evento"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteEvent(event.id)}
+                                disabled={eventsActionLoading}
+                                className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                aria-label="Eliminar evento"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1927,6 +2209,68 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                 </div>
+
+                <form onSubmit={handleSaveDrill} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                        {editingDrillId ? "Editar ejercicio" : "Crear ejercicio"}
+                      </h2>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        La biblioteca se actualiza automáticamente mediante el listener existente.
+                      </p>
+                    </div>
+                    {editingDrillId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelDrillEdit}
+                        className="px-3 py-2 rounded-xl border border-slate-800 text-slate-400 text-[10px] font-black uppercase hover:text-slate-200 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <input
+                      type="text"
+                      value={drillTitle}
+                      onChange={(event) => setDrillTitle(event.target.value)}
+                      placeholder="Título del ejercicio"
+                      required
+                      className="md:col-span-2 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <select
+                      value={drillCategory}
+                      onChange={(event) => setDrillCategory(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="técnica">Técnica individual</option>
+                      <option value="físico">Físico y coordinación</option>
+                      <option value="táctica">Táctica de juego</option>
+                    </select>
+                    <input
+                      type="url"
+                      value={drillVideoUrl}
+                      onChange={(event) => setDrillVideoUrl(event.target.value)}
+                      placeholder="URL del video"
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <textarea
+                      value={drillDescription}
+                      onChange={(event) => setDrillDescription(event.target.value)}
+                      placeholder="Descripción"
+                      rows={3}
+                      className="md:col-span-4 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981] resize-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={drillsActionLoading}
+                    className="px-4 py-2 rounded-xl bg-[#10b981] text-slate-950 text-[10px] font-black uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {drillsActionLoading ? "Guardando..." : editingDrillId ? "Guardar Cambios" : "Crear Ejercicio"}
+                  </button>
+                </form>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <input
@@ -1961,6 +2305,12 @@ export default function AdminDashboard() {
                 {drillsError && (
                   <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
                     {drillsError}
+                  </div>
+                )}
+
+                {drillsSuccessMessage && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs">
+                    {drillsSuccessMessage}
                   </div>
                 )}
 
@@ -2006,6 +2356,26 @@ export default function AdminDashboard() {
                           <p className="text-[10px] text-slate-450 mt-1 line-clamp-2 leading-relaxed font-sans">
                             {drill.description || "Sin descripción"}
                           </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditDrill(drill)}
+                            disabled={drillsActionLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-black uppercase hover:text-white transition-all disabled:opacity-50"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDrill(drill.id)}
+                            disabled={drillsActionLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-black uppercase hover:bg-red-500/20 transition-all disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Eliminar
+                          </button>
                         </div>
                         {(() => {
                           const videoInfo = parseVideoUrl(drill.videoUrl);

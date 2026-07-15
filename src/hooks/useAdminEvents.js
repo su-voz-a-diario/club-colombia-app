@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { AdminService } from "@/services/admin";
 import { CalendarService } from "@/services/calendar";
 import { adminStep } from "@/lib/adminDiagnostics";
 
@@ -12,6 +13,8 @@ export function useAdminEvents() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   adminStep("ADMIN_STEP_59_USE_ADMIN_EVENTS_BEFORE_EFFECT");
   useEffect(() => {
@@ -41,10 +44,54 @@ export function useAdminEvents() {
     }
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setError(null);
+    setSuccessMessage("");
+  }, []);
+
+  const saveEvent = useCallback(async (eventData, eventId = null) => {
+    setActionLoading(true);
+    clearMessages();
+
+    try {
+      const result = await AdminService.saveEvent(eventData, eventId);
+      setSuccessMessage(eventId ? "Evento actualizado correctamente." : "Evento creado correctamente.");
+      return result;
+    } catch (err) {
+      const message = err?.message || "No fue posible guardar el evento.";
+      setError(message);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, [clearMessages]);
+
+  const deleteEvent = useCallback(async (eventId) => {
+    setActionLoading(true);
+    clearMessages();
+
+    try {
+      const result = await AdminService.deleteEvent(eventId);
+      setSuccessMessage("Evento eliminado correctamente.");
+      return result;
+    } catch (err) {
+      const message = err?.message || "No fue posible eliminar el evento.";
+      setError(message);
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  }, [clearMessages]);
+
   return {
     events,
     loading,
-    error
+    error,
+    actionLoading,
+    successMessage,
+    saveEvent,
+    deleteEvent,
+    clearMessages
   };
 }
 export default useAdminEvents;

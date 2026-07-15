@@ -158,12 +158,19 @@ export async function deleteEmptyStudent(student) {
  * Crea un nuevo evento en el calendario de Firebase.
  */
 export async function createEvent(eventData) {
+  return saveEvent(eventData);
+}
+
+/**
+ * Guarda o actualiza un evento en el calendario de Firebase.
+ */
+export async function saveEvent(eventData, eventId = null) {
   if (!eventData.title || !eventData.date || !eventData.time) {
     throw new Error("Datos de evento incompletos");
   }
-  const eventId = eventData.title.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  const finalId = eventId || eventData.title.toLowerCase().replace(/[^a-z0-9]/g, "-");
   
-  const docRef = doc(db, "events", eventId);
+  const docRef = doc(db, "events", finalId);
   await import("firebase/firestore").then(({ setDoc }) => 
     setDoc(docRef, {
       title: eventData.title,
@@ -173,10 +180,10 @@ export async function createEvent(eventData) {
       location: eventData.location || "Club Colombia Cancha Principal",
       category: eventData.category,
       description: eventData.description || "",
-      rsvps: {}
-    })
+      rsvps: eventData.rsvps || {}
+    }, { merge: true })
   );
-  return { success: true, eventId };
+  return { success: true, eventId: finalId };
 }
 
 /**

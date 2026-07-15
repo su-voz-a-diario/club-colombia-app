@@ -59,6 +59,12 @@ export const AdminService = {
       : FirebaseAdmin.createEvent(eventData);
   },
 
+  saveEvent: (eventData, eventId) => {
+    return isDemoActive()
+      ? DemoAdmin.saveEvent(eventData, eventId)
+      : FirebaseAdmin.saveEvent(eventData, eventId);
+  },
+
   deleteEvent: (eventId) => {
     return isDemoActive()
       ? DemoAdmin.deleteEvent(eventId)
