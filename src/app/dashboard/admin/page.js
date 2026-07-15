@@ -95,6 +95,14 @@ export default function AdminDashboard() {
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleMessage, setLifecycleMessage] = useState("");
   const [lifecycleError, setLifecycleError] = useState("");
+  const [parentLinkIdentifierType, setParentLinkIdentifierType] = useState("phone");
+  const [parentLinkIdentifier, setParentLinkIdentifier] = useState("");
+  const [parentLinkLoading, setParentLinkLoading] = useState(false);
+  const [parentLinkSaving, setParentLinkSaving] = useState(false);
+  const [parentLinkResult, setParentLinkResult] = useState(null);
+  const [parentLinkSelectedIds, setParentLinkSelectedIds] = useState([]);
+  const [parentLinkMessage, setParentLinkMessage] = useState("");
+  const [parentLinkError, setParentLinkError] = useState("");
   const {
     data: students,
     loading: studentsLoading,
@@ -590,6 +598,109 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleParentLinkSearch = async (event) => {
+    event.preventDefault();
+    setParentLinkLoading(true);
+    setParentLinkError("");
+    setParentLinkMessage("");
+    setParentLinkResult(null);
+    setParentLinkSelectedIds([]);
+
+    try {
+      const response = await fetch("/api/admin/link-parent-diagnostics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifierType: parentLinkIdentifierType,
+          identifier: parentLinkIdentifier
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "No fue posible diagnosticar la cuenta padre.");
+      }
+      setParentLinkResult(data);
+    } catch (err) {
+      setParentLinkError(err.message || "No fue posible diagnosticar la cuenta padre.");
+    } finally {
+      setParentLinkLoading(false);
+    }
+  };
+
+  const toggleParentLinkStudent = (studentId) => {
+    setParentLinkSelectedIds((prev) => (
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    ));
+  };
+
+  const handleParentLinkSubmit = async () => {
+    if (!parentLinkResult?.parent?.uid || parentLinkSelectedIds.length === 0) return;
+    const selectedStudents = parentLinkResult.students.filter((student) => parentLinkSelectedIds.includes(student.studentId));
+    const relatedPaymentCount = parentLinkResult.payments.filter((payment) => (
+      parentLinkSelectedIds.includes(payment.studentId) && !payment.parentUid
+    )).length;
+    const confirmed = window.confirm(
+      [
+        "Confirma la vinculación administrativa:",
+        "",
+        `Cuenta padre: ${parentLinkResult.parent.uid}`,
+        `Alumnos seleccionados: ${selectedStudents.map((student) => `${student.name || "Sin nombre"} (${student.studentId})`).join(", ")}`,
+        "",
+        "Se escribirá:",
+        "- users/{parentUid}: role=parent, status=active, studentIds, updatedAt",
+        "- students/{studentId}: parentUid, updatedAt",
+        `- payments relacionados sin parentUid: parentUid, updatedAt (${relatedPaymentCount})`,
+        "",
+        "No se cambiará el status de alumnos ni pagos."
+      ].join("\n")
+    );
+    if (!confirmed) return;
+
+    setParentLinkSaving(true);
+    setParentLinkError("");
+    setParentLinkMessage("");
+
+    try {
+      const response = await fetch("/api/admin/link-parent-students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentUid: parentLinkResult.parent.uid,
+          studentIds: parentLinkSelectedIds
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "No fue posible vincular la cuenta padre.");
+      }
+      setParentLinkMessage(`Vinculación exitosa. Alumnos vinculados: ${data.linkedStudentIds.length}. Pagos históricos actualizados: ${data.updatedPayments}.`);
+      setParentLinkSelectedIds([]);
+      setParentLinkResult((prev) => prev ? {
+        ...prev,
+        parent: {
+          ...prev.parent,
+          studentIds: data.finalStudentIds || prev.parent.studentIds
+        },
+        students: prev.students.map((student) => (
+          (data.linkedStudentIds || []).includes(student.studentId)
+            ? { ...student, parentUid: data.parentUid, canLink: true, conflict: false }
+            : student
+        )),
+        payments: prev.payments.map((payment) => (
+          (data.linkedStudentIds || []).includes(payment.studentId) && !payment.parentUid
+            ? { ...payment, parentUid: data.parentUid }
+            : payment
+        ))
+      } : prev);
+    } catch (err) {
+      setParentLinkError(err.message || "No fue posible vincular la cuenta padre.");
+    } finally {
+      setParentLinkSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#07090e] flex flex-col">
       <header className="glass-panel border-b border-slate-900 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
@@ -1030,6 +1141,151 @@ export default function AdminDashboard() {
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : activeTab === "parent-link" ? (
+              <div className="pt-4 space-y-5 font-sans">
+                <div>
+                  <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                    Vincular Cuenta Padre
+                  </h2>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Diagnóstico y vinculación explícita de una cuenta Auth con alumnos concretos.
+                  </p>
+                </div>
+
+                <form
+                  onSubmit={handleParentLinkSearch}
+                  className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-[150px_1fr_auto] gap-3"
+                >
+                  <select
+                    value={parentLinkIdentifierType}
+                    onChange={(event) => setParentLinkIdentifierType(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+                  >
+                    <option value="phone">Teléfono</option>
+                    <option value="uid">UID</option>
+                    <option value="email">Correo</option>
+                  </select>
+                  <input
+                    value={parentLinkIdentifier}
+                    onChange={(event) => setParentLinkIdentifier(event.target.value)}
+                    placeholder="Identificador de la cuenta padre"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-[#10b981]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={parentLinkLoading || !parentLinkIdentifier.trim()}
+                    className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-4 py-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {parentLinkLoading ? "Buscando..." : "Diagnosticar"}
+                  </button>
+                </form>
+
+                {parentLinkError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{parentLinkError}</span>
+                  </div>
+                )}
+
+                {parentLinkMessage && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>{parentLinkMessage}</span>
+                  </div>
+                )}
+
+                {parentLinkResult && (
+                  <div className="space-y-4">
+                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-2">
+                      <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Usuario localizado</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-slate-400">
+                        <span className="min-w-0">UID: <b className="text-slate-200 font-mono break-all">{parentLinkResult.parent.uid}</b></span>
+                        <span>Auth: <b className="text-slate-200">{parentLinkResult.parent.authExists ? "Existe" : "No existe"}</b></span>
+                        <span className="min-w-0">Teléfono: <b className="text-slate-200 font-mono break-all">{parentLinkResult.parent.phone || "Sin registro"}</b></span>
+                        <span className="min-w-0">Correo: <b className="text-slate-200 break-all">{parentLinkResult.parent.email || "Sin registro"}</b></span>
+                        <span>Estado: <b className="text-slate-200">{parentLinkResult.parent.status || "Sin users/{uid}"}</b></span>
+                        <span>Alumno(s) actuales: <b className="text-slate-200">{parentLinkResult.parent.studentIds?.length || 0}</b></span>
+                      </div>
+                    </div>
+
+                    {parentLinkResult.warnings?.length > 0 && (
+                      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-3.5 rounded-xl text-xs space-y-1">
+                        {parentLinkResult.warnings.map((warning) => (
+                          <div key={warning} className="flex items-center gap-2">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{warning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                      <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Alumnos candidatos</h3>
+                      {parentLinkResult.students.length === 0 ? (
+                        <div className="text-xs text-slate-500">No hay alumnos candidatos.</div>
+                      ) : parentLinkResult.students.map((student) => (
+                        <label
+                          key={student.studentId}
+                          className={`flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-xl border ${
+                            student.conflict ? "border-red-500/30 bg-red-500/5" : "border-slate-800 bg-[#0e121e]/70"
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={parentLinkSelectedIds.includes(student.studentId)}
+                                onChange={() => toggleParentLinkStudent(student.studentId)}
+                                disabled={!student.canLink}
+                                className="accent-[#10b981]"
+                              />
+                              <span className="text-xs font-bold text-slate-200">{student.name || student.studentId}</span>
+                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                                student.status === "active" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-500"
+                              }`}>
+                                {student.status || "sin status"}
+                              </span>
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono break-all">ID: {student.studentId}</div>
+                          </div>
+                          <div className="text-[9px] text-slate-500 md:text-right">
+                            <div>billingStatus: <b className="text-slate-300">{student.billingStatus || "sin dato"}</b></div>
+                            <div className="break-all">parentUid: <b className={student.conflict ? "text-red-400" : "text-slate-300"}>{student.parentUid || "vacío"}</b></div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                      <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Pagos relacionados</h3>
+                      {parentLinkResult.payments.length === 0 ? (
+                        <div className="text-xs text-slate-500">No hay pagos relacionados.</div>
+                      ) : parentLinkResult.payments.map((payment) => (
+                        <div key={payment.paymentId} className="grid grid-cols-1 md:grid-cols-4 gap-2 text-[10px] text-slate-400 border border-slate-850 rounded-xl p-3 min-w-0">
+                          <span className="font-mono text-slate-300 break-all">{payment.paymentId}</span>
+                          <span className="break-all">studentId: {payment.studentId || "vacío"}</span>
+                          <span>status: {payment.status || "vacío"}</span>
+                          <span className="break-all">parentUid: {payment.parentUid || "vacío"}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl">
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        La vinculación no cambia estados de alumnos ni pagos. Solo conecta la cuenta padre con los alumnos seleccionados y completa parentUid en pagos históricos exactos.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleParentLinkSubmit}
+                        disabled={parentLinkSaving || parentLinkSelectedIds.length === 0}
+                        className="bg-[#10b981] hover:bg-[#059669] disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-display font-black text-[10px] px-5 py-2.5 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        {parentLinkSaving ? "Vinculando..." : `Vincular (${parentLinkSelectedIds.length})`}
+                      </button>
                     </div>
                   </div>
                 )}
