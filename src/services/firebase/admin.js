@@ -43,9 +43,17 @@ export function subscribeStudentsList(callback) {
 /**
  * Suscribe en tiempo real a todas las evaluaciones técnicas.
  */
-export function subscribeAllEvaluations(callback) {
-  const unsubscribe = onSnapshot(collection(db, "evaluations"), () => {
-    console.log("evaluations snapshot received");
+export function subscribeAllEvaluations(callback, onError) {
+  const unsubscribe = onSnapshot(collection(db, "evaluations"), (snapshot) => {
+    const list = [];
+
+    snapshot.forEach((doc) => {
+      list.push({ id: doc.id, ...doc.data() });
+    });
+
+    callback(list);
+  }, (err) => {
+    if (onError) onError(err);
   });
 
   return unsubscribe;

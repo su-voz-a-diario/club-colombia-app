@@ -8,12 +8,24 @@ import { adminStep } from "@/lib/adminDiagnostics";
  */
 export function useAdminEvaluations() {
   adminStep("ADMIN_STEP_46_USE_ADMIN_EVALUATIONS_RENDER");
-  const [data] = useState([]);
-  const [loading] = useState(false);
-  const [error] = useState(null);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = AdminService.subscribeAllEvaluations(() => {});
+    setLoading(true);
+    setError(null);
+
+    const unsubscribe = AdminService.subscribeAllEvaluations(
+      (evaluations) => {
+        setData(evaluations);
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message || "Error al cargar evaluaciones");
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubscribe();

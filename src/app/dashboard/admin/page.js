@@ -11,6 +11,7 @@ import { useAdminStudents } from "@/hooks/useAdminStudents";
 const tabs = [
   { id: "students", label: "Control de Alumnos y Excepciones", title: "Control de Alumnos" },
   { id: "billing", label: "Mora y Validaciones", title: "Mora y Validaciones" },
+  { id: "evaluations", label: "Evaluaciones Técnicas", title: "Evaluaciones Técnicas" },
   { id: "parent-link", label: "Vincular Padre", title: "Vincular Padre" },
   { id: "schedules", label: "Planificación de Microciclos", title: "Planificación" },
   { id: "drills", label: "Biblioteca de Ejercicios", title: "Biblioteca de Ejercicios" },
@@ -26,9 +27,12 @@ export default function AdminDashboard() {
   const [attendanceSearch, setAttendanceSearch] = useState("");
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState("all");
   const [attendanceSort, setAttendanceSort] = useState("newest");
+  const [evaluationSearch, setEvaluationSearch] = useState("");
+  const [evaluationHealthFilter, setEvaluationHealthFilter] = useState("all");
+  const [evaluationSort, setEvaluationSort] = useState("newest");
   const { data: students } = useAdminStudents();
   const { data: attendance, loading: attendanceLoading, error: attendanceError } = useAdminAttendance();
-  const { data: evaluations } = useAdminEvaluations();
+  const { data: evaluations, loading: evaluationsLoading, error: evaluationsError } = useAdminEvaluations();
   const { pendingPayments, loading: paymentsLoading, error: paymentsError } = useAdminPayments();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
   const getTimeValue = (value) => {
@@ -104,6 +108,47 @@ export default function AdminDashboard() {
         return attendanceSort === "oldest" ? aTime - bTime : bTime - aTime;
       });
   }, [attendance, attendanceSearch, attendanceSort, attendanceStatusFilter]);
+
+  const getEvaluationAverage = (evaluation) => {
+    const metrics = evaluation.metrics || {};
+    const values = ["speed", "passing", "dribbling", "shooting", "physical", "discipline"]
+      .map((key) => Number(metrics[key] || 0))
+      .filter((value) => Number.isFinite(value));
+
+    if (values.length === 0) return 0;
+    return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+  };
+
+  const filteredEvaluations = useMemo(() => {
+    const normalizedSearch = evaluationSearch.trim().toLowerCase();
+
+    return [...evaluations]
+      .filter((evaluation) => {
+        const healthStatus = evaluation.healthStatus || "optimal";
+        if (evaluationHealthFilter !== "all" && healthStatus !== evaluationHealthFilter) return false;
+
+        if (!normalizedSearch) return true;
+
+        return [
+          evaluation.id,
+          evaluation.studentId,
+          evaluation.studentName,
+          evaluation.date,
+          evaluation.healthStatus,
+          evaluation.tacticalNotes
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      })
+      .sort((a, b) => {
+        if (evaluationSort === "average-desc") return getEvaluationAverage(b) - getEvaluationAverage(a);
+        if (evaluationSort === "average-asc") return getEvaluationAverage(a) - getEvaluationAverage(b);
+
+        const aTime = getTimeValue(a.date) || getTimeValue(a.timestamp) || getTimeValue(a.createdAt);
+        const bTime = getTimeValue(b.date) || getTimeValue(b.timestamp) || getTimeValue(b.createdAt);
+        return evaluationSort === "oldest" ? aTime - bTime : bTime - aTime;
+      });
+  }, [evaluationHealthFilter, evaluationSearch, evaluationSort, evaluations]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("es-MX", {
@@ -408,6 +453,111 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : activeTab === "evaluations" ? (
+              <div className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Evaluaciones</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{evaluations.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostradas</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredEvaluations.length}</p>
+                  </div>
+                  <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
+                    <p className="text-xs font-bold text-[#10b981] mt-2">
+                      {evaluationsLoading ? "Cargando" : "Sincronizado"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="search"
+                    value={evaluationSearch}
+                    onChange={(event) => setEvaluationSearch(event.target.value)}
+                    placeholder="Buscar evaluación"
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                  />
+                  <select
+                    value={evaluationHealthFilter}
+                    onChange={(event) => setEvaluationHealthFilter(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="all">Todos los estados físicos</option>
+                    <option value="optimal">Óptimo</option>
+                    <option value="fatigue">Fatiga</option>
+                    <option value="injured">Lesión</option>
+                  </select>
+                  <select
+                    value={evaluationSort}
+                    onChange={(event) => setEvaluationSort(event.target.value)}
+                    className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                  >
+                    <option value="newest">Más recientes</option>
+                    <option value="oldest">Más antiguas</option>
+                    <option value="average-desc">Promedio mayor</option>
+                    <option value="average-asc">Promedio menor</option>
+                  </select>
+                </div>
+
+                {evaluationsError && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl text-xs">
+                    {evaluationsError}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans">
+                    <thead>
+                      <tr className="border-b border-slate-850 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="pb-3">Alumno</th>
+                        <th className="pb-3">Fecha</th>
+                        <th className="pb-3">Promedio</th>
+                        <th className="pb-3">Vel.</th>
+                        <th className="pb-3">Pase</th>
+                        <th className="pb-3">Físico</th>
+                        <th className="pb-3">Estado físico</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {evaluationsLoading ? (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
+                            Cargando evaluaciones...
+                          </td>
+                        </tr>
+                      ) : filteredEvaluations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
+                            No hay evaluaciones para mostrar.
+                          </td>
+                        </tr>
+                      ) : filteredEvaluations.map((evaluation) => {
+                        const metrics = evaluation.metrics || {};
+                        const healthStatus = evaluation.healthStatus || "optimal";
+
+                        return (
+                          <tr key={evaluation.id} className="text-xs">
+                            <td className="py-3 font-bold text-slate-200">{evaluation.studentName || "Sin nombre"}</td>
+                            <td className="py-3 text-slate-500 font-mono text-[10px]">{evaluation.date || "Sin fecha"}</td>
+                            <td className="py-3 text-[#10b981] font-bold">{getEvaluationAverage(evaluation)}</td>
+                            <td className="py-3 text-slate-400">{metrics.speed ?? "-"}</td>
+                            <td className="py-3 text-slate-400">{metrics.passing ?? "-"}</td>
+                            <td className="py-3 text-slate-400">{metrics.physical ?? "-"}</td>
+                            <td className="py-3">
+                              <span className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[9px] font-black uppercase">
+                                {healthStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
