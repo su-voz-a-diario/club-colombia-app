@@ -364,13 +364,9 @@ export async function confirmManualPayment(studentIdOrName) {
  * Suscribe en tiempo real a los pagos en estado "pending".
  */
 export function subscribePendingPayments(callback) {
-  const { collection } = require("firebase/firestore");
-  const paymentsRef = collection(db, "payments");
-  adminStep("ADMIN_PAYMENTS_SUBSCRIBE_STAGE_S1_COLLECTION_CREATED", {
-    path: paymentsRef.path
-  });
+  console.log("subscribePendingPayments S0 entered");
   return () => {
-    adminStep("ADMIN_PAYMENTS_SUBSCRIBE_STAGE_S1_CLEANUP");
+    console.log("subscribePendingPayments S0 cleanup");
   };
 }
 
