@@ -60,7 +60,12 @@ export function useCoach() {
   const updateStudentLevel = useCallback(async (studentId, level) => {
     setError(null);
     try {
-      return await CoachService.updateStudentLevel(studentId, level);
+      const result = await CoachService.updateStudentLevel(studentId, level);
+      setData((prev) => prev.map((student) => {
+        const currentId = student.studentId || student.id;
+        return currentId === studentId ? { ...student, level: result.level || null } : student;
+      }));
+      return result;
     } catch (err) {
       setError(err);
       throw err;

@@ -2,7 +2,6 @@
 
 import { db } from "@/lib/firebase";
 import { collection, doc, onSnapshot, getDocs, setDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { normalizeLevel } from "@/lib/levelModel";
 
 /**
  * Obtiene la lista de deportistas asignados de la base de datos real.
@@ -73,12 +72,19 @@ export async function saveTechnicalEvaluation(evaluationData) {
 
 export async function updateStudentLevel(studentId, level) {
   if (!studentId) throw new Error("studentId requerido");
-  const studentRef = doc(db, "students", studentId);
-  await updateDoc(studentRef, {
-    level: normalizeLevel(level) || null,
-    updatedAt: serverTimestamp()
+
+  const response = await fetch("/api/students/level", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ studentId, level: level || "" })
   });
-  return { success: true };
+
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || "No fue posible actualizar el nivel.");
+  }
+
+  return data;
 }
 
 /**
