@@ -57,13 +57,24 @@ export function useCoach() {
     }
   }, []);
 
+  const updateStudentLevel = useCallback(async (studentId, level) => {
+    setError(null);
+    try {
+      return await CoachService.updateStudentLevel(studentId, level);
+    } catch (err) {
+      setError(err);
+      throw err;
+    }
+  }, []);
+
   return {
     data,
     loading,
     error,
     refresh: fetchStudents,
     saveAttendance,
-    saveEvaluation
+    saveEvaluation,
+    updateStudentLevel
   };
 }
 export default useCoach;

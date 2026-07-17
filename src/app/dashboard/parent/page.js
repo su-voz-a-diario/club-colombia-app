@@ -8,6 +8,9 @@ import QRGenerator from "@/components/QRGenerator";
 import RadarPerformance from "@/components/RadarPerformance";
 import PaymentSimulator from "@/components/PaymentSimulator";
 import { useParent, useAttendance, usePayments, useCalendar, useQR, useParentStudents } from "@/hooks";
+import { useTrainingSchedules } from "@/hooks/useTrainingSchedules";
+import LevelBadge from "@/components/LevelBadge";
+import { getWeekdayLabel, trainingScheduleMatchesStudent } from "@/lib/trainingScheduleModel";
 
 
 const parseVideoUrl = (url) => {
@@ -80,6 +83,7 @@ export default function ParentDashboard() {
   const { data: attendanceData } = useAttendance(resolvedStudentId, resolvedStudentName);
   const { data: paymentsData, reportPayment } = usePayments(resolvedStudentId, parentUid, userEmail);
   const { data: calendarData, updateRSVP } = useCalendar(resolvedCategoryName);
+  const { schedules: allTrainingSchedules } = useTrainingSchedules({ includeCoaches: false });
 
   // DECLARACIÓN DE CONSTANTES DERIVADAS DE LOS HOOKS (REEMPLAZANDO LOS USESTATE Y USEEFFECTS)
   const representativeName = parentData?.displayName || parentData?.name || "";
@@ -96,6 +100,7 @@ export default function ParentDashboard() {
   const drills = attendanceData?.drills || [];
   const myPayments = paymentsData || [];
   const events = calendarData || [];
+  const weeklySchedules = (allTrainingSchedules || []).filter((schedule) => trainingScheduleMatchesStudent(schedule, studentData));
 
   useEffect(() => {
     if (!parentUid || studentIds.length === 0) return;
@@ -470,7 +475,7 @@ export default function ParentDashboard() {
                         activeSubTab === "calendar" ? "border-[#10b981] text-[#10b981]" : "border-transparent text-slate-400 hover:text-slate-200"
                       }`}
                     >
-                      Microciclo Semanal ({events.length})
+                      Microciclo Semanal ({weeklySchedules.length + events.length})
                     </button>
                     <button
                       onClick={() => setActiveSubTab("drills")}
@@ -570,12 +575,34 @@ export default function ParentDashboard() {
                         </div>
                       </div>
 
-                      {events.length === 0 ? (
+                      {weeklySchedules.length === 0 && events.length === 0 ? (
                         <div className="bg-[#07090e]/40 border border-slate-850 p-6 rounded-2xl text-center text-xs text-slate-500 font-sans">
                           No hay eventos activos programados en este microciclo para la categoría.
                         </div>
                       ) : (
                         <div className="space-y-3">
+                          {weeklySchedules.map((schedule) => (
+                            <div key={`schedule-${schedule.id}`} className="bg-[#07090e]/60 border border-emerald-500/20 p-4 rounded-2xl space-y-3">
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-[#10b981]">
+                                      Entrenamiento semanal
+                                    </span>
+                                    <LevelBadge level={schedule.level} emptyLabel="Todos los niveles" />
+                                  </div>
+                                  <h4 className="font-bold text-slate-200 text-xs mt-1.5 truncate">{schedule.title}</h4>
+                                  <p className="text-[10px] text-slate-450 mt-1 leading-normal">{schedule.description || "Sesión oficial del club."}</p>
+                                  <div className="text-[9px] text-slate-500 font-mono mt-1">
+                                    {getWeekdayLabel(schedule.dayOfWeek)} • {schedule.startTime}{schedule.endTime ? ` - ${schedule.endTime}` : ""} • {schedule.location}
+                                  </div>
+                                  {schedule.coachName && (
+                                    <div className="text-[9px] text-slate-500 mt-1">Entrenador: {schedule.coachName}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                           {events.map((event) => {
                             const userResponse = event.rsvps?.[studentName] || null;
                             return (

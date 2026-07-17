@@ -27,6 +27,12 @@ export async function saveTechnicalEvaluation(evaluationData) {
   return { success: true };
 }
 
+export async function updateStudentLevel(studentId, level) {
+  await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
+  console.log(`[DEMO MODE] Nivel actualizado para ${studentId}: ${level || "sin nivel"}`);
+  return { success: true };
+}
+
 export async function markAttendance(studentId, status) {
   await new Promise((resolve) => setTimeout(resolve, demoConfig.behavior.simulatedLatency));
   console.log(`[DEMO MODE] Asistencia individual registrada para ${studentId}: ${status}`);

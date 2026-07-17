@@ -4,7 +4,11 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, LogOut, Check, X, AlertCircle, Dumbbell, ClipboardList, TrendingUp, Send, Star, Volume2 } from "lucide-react";
 import { useCoach, useCalendar } from "@/hooks";
+import { useTrainingSchedules } from "@/hooks/useTrainingSchedules";
 import RadarPerformance from "@/components/RadarPerformance";
+import LevelBadge from "@/components/LevelBadge";
+import { LEVEL_OPTIONS, resolveStudentCategoryAndLevel } from "@/lib/levelModel";
+import { getWeekdayLabel, sortTrainingSchedules } from "@/lib/trainingScheduleModel";
 
 export default function CoachDashboard() {
   const [attendance, setAttendance] = useState([]);
@@ -23,10 +27,12 @@ export default function CoachDashboard() {
   const [tacticalNotes, setTacticalNotes] = useState("");
   const [evaluationSaved, setEvaluationSaved] = useState(false);
   const [evaluationError, setEvaluationError] = useState("");
+  const [levelMessage, setLevelMessage] = useState("");
 
   // Invocar custom hooks para el Demo Mode / Firebase
-  const { data: coachStudents, saveAttendance: reportAttendance, saveEvaluation: reportEvaluation } = useCoach();
+  const { data: coachStudents, saveAttendance: reportAttendance, saveEvaluation: reportEvaluation, updateStudentLevel } = useCoach();
   const { data: calendarEvents } = useCalendar();
+  const { schedules: allTrainingSchedules } = useTrainingSchedules({ includeCoaches: false });
 
   // DECLARACIÓN DE CONSTANTES DERIVADAS DE LOS HOOKS (REEMPLAZANDO USESTATES REDUNDANTES)
   const students = coachStudents || [];
@@ -38,6 +44,20 @@ export default function CoachDashboard() {
   const nextEvent = (calendarEvents || [])
     .filter(e => e.date >= nowStr)
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] || null;
+  const weeklySchedules = (allTrainingSchedules || [])
+    .filter(schedule => schedule.active)
+    .sort(sortTrainingSchedules);
+
+  const handleLevelChange = async (studentId, level) => {
+    try {
+      setLevelMessage("");
+      await updateStudentLevel(studentId, level);
+      setLevelMessage("Nivel actualizado correctamente.");
+      setTimeout(() => setLevelMessage(""), 2500);
+    } catch (err) {
+      setLevelMessage(err?.message || "No fue posible actualizar el nivel.");
+    }
+  };
 
   useEffect(() => {
     if (coachStudents) {
@@ -231,6 +251,34 @@ export default function CoachDashboard() {
               </div>
             )}
 
+            {levelMessage && (
+              <div className="bg-sky-500/10 border border-sky-500/20 text-sky-300 p-3 rounded-xl text-[10px] animate-fade-in">
+                {levelMessage}
+              </div>
+            )}
+
+            {weeklySchedules.length > 0 && (
+              <div className="glass-item-premium p-4 rounded-2xl space-y-3">
+                <span className="text-[9px] text-emerald-400 font-black uppercase tracking-widest block">
+                  Horarios oficiales
+                </span>
+                <div className="space-y-2">
+                  {weeklySchedules.map((schedule) => (
+                    <div key={schedule.id} className="border border-slate-800/70 rounded-xl p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-200 truncate">{schedule.title}</span>
+                        <LevelBadge level={schedule.level} emptyLabel="Todos" />
+                      </div>
+                      <p className="text-[9px] text-slate-500 font-mono mt-1">
+                        {getWeekdayLabel(schedule.dayOfWeek)} • {schedule.startTime}{schedule.endTime ? ` - ${schedule.endTime}` : ""} • {schedule.category}
+                      </p>
+                      <p className="text-[9px] text-slate-500 mt-1">{schedule.location}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2 mt-2">
               {attendance.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-500 font-sans glass-item-premium rounded-2xl">
@@ -241,6 +289,7 @@ export default function CoachDashboard() {
                   <div className="flex flex-col gap-1 min-w-0">
                     <span className="text-sm font-bold text-slate-200 truncate">{athlete.name}</span>
                     <div className="flex items-center gap-1.5">
+                      <LevelBadge level={resolveStudentCategoryAndLevel(athlete).level} />
                       {athlete.healthStatus === "injured" && (
                         <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 uppercase tracking-wider">
                           <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse box-glow-emerald" style={{boxShadow: '0 0 8px red'}} /> Lesionado
@@ -261,6 +310,17 @@ export default function CoachDashboard() {
                   
                   {/* Selector Táctil Premium */}
                   <div className="flex items-center gap-1.5 bg-[#07090e]/50 p-1.5 rounded-xl border border-slate-800/50 shrink-0">
+                    <select
+                      value={resolveStudentCategoryAndLevel(athlete).level}
+                      onChange={(event) => handleLevelChange(athlete.studentId || athlete.id, event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-lg px-2 py-2 text-[9px] text-slate-300 focus:outline-none focus:border-emerald-500"
+                      aria-label={`Nivel de ${athlete.name}`}
+                    >
+                      <option value="">Sin nivel</option>
+                      {LEVEL_OPTIONS.map((level) => (
+                        <option key={level.value} value={level.value}>{level.label}</option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => handleAttendanceClick(athlete, "P")}
@@ -337,7 +397,7 @@ export default function CoachDashboard() {
                   <option value="" disabled>Aún no hay registros</option>
                 )}
                 {operationalStudents.map((s) => (
-                  <option key={s.id} value={s.studentId || s.id}>{s.name}</option>
+                  <option key={s.id} value={s.studentId || s.id}>{s.name} - {resolveStudentCategoryAndLevel(s).level ? LEVEL_OPTIONS.find(level => level.value === resolveStudentCategoryAndLevel(s).level)?.label : "Sin nivel"}</option>
                 ))}
               </select>
             </div>

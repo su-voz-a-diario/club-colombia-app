@@ -11,8 +11,17 @@ import { useAdminEvents } from "@/hooks/useAdminEvents";
 import { useAdminPayments } from "@/hooks/useAdminPayments";
 import { useAdminPhones } from "@/hooks/useAdminPhones";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
+import { useTrainingSchedules } from "@/hooks/useTrainingSchedules";
+import LevelBadge from "@/components/LevelBadge";
+import { LEVEL_OPTIONS, getLevelLabel, parseLegacyCategoryAndLevel, resolveStudentCategoryAndLevel } from "@/lib/levelModel";
+import { WEEKDAY_OPTIONS, getWeekdayLabel } from "@/lib/trainingScheduleModel";
 import { calculateLeaderboard, categoryNameToId, normalizeStudentName } from "@/lib/studentModel";
 import { normalizeAndValidatePhone } from "@/lib/phone";
+
+const baseCategoryOptions = [
+  "Sub-6", "Sub-7", "Sub-8", "Sub-9", "Sub-10", "Sub-11", "Sub-12", "Sub-13", "Sub-14",
+  "Sub-15", "Sub-16", "Sub-17", "Sub-18", "Sub-19", "Sub-20", "Sub-21", "Sub-22"
+];
 
 const tabs = [
   { id: "students", label: "Control de Alumnos y Excepciones", title: "Control de Alumnos" },
@@ -95,10 +104,12 @@ export default function AdminDashboard() {
   const [approvingPaymentId, setApprovingPaymentId] = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [newCategory, setNewCategory] = useState("");
+  const [newLevel, setNewLevel] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [manualStudentName, setManualStudentName] = useState("");
   const [manualStudentAge, setManualStudentAge] = useState("");
+  const [manualLevel, setManualLevel] = useState("initiation");
   const [manualParentName, setManualParentName] = useState("");
   const [manualParentPhone, setManualParentPhone] = useState("");
   const [manualPaidCash, setManualPaidCash] = useState(false);
@@ -126,6 +137,16 @@ export default function AdminDashboard() {
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [selectedParentStudent, setSelectedParentStudent] = useState(null);
   const [newParentPhone, setNewParentPhone] = useState("");
+  const [scheduleTitle, setScheduleTitle] = useState("");
+  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(1);
+  const [scheduleStartTime, setScheduleStartTime] = useState("");
+  const [scheduleEndTime, setScheduleEndTime] = useState("");
+  const [scheduleCategory, setScheduleCategory] = useState("Sub-8");
+  const [scheduleLevel, setScheduleLevel] = useState("");
+  const [scheduleCoachUid, setScheduleCoachUid] = useState("");
+  const [scheduleLocation, setScheduleLocation] = useState("");
+  const [scheduleDescription, setScheduleDescription] = useState("");
+  const [editingScheduleId, setEditingScheduleId] = useState(null);
   const {
     data: students,
     loading: studentsLoading,
@@ -188,6 +209,17 @@ export default function AdminDashboard() {
     clearError: clearPaymentError,
     clearSuccessMessage: clearPaymentSuccessMessage
   } = useAdminPayments();
+  const {
+    schedules: trainingSchedules,
+    coaches: scheduleCoaches,
+    loading: schedulesLoading,
+    error: schedulesError,
+    actionLoading: schedulesActionLoading,
+    successMessage: schedulesSuccessMessage,
+    saveSchedule,
+    toggleScheduleStatus,
+    deleteSchedule
+  } = useTrainingSchedules();
   const currentTab = tabs.find((tab) => tab.id === activeTab) || tabs[0];
   const allAttendance = attendance;
   const getTimeValue = (value) => {
@@ -341,6 +373,19 @@ export default function AdminDashboard() {
           : String(a.time || "").localeCompare(String(b.time || ""));
       });
   }, [eventSearch, eventSort, eventTypeFilter, events]);
+
+  const categoryOptions = useMemo(() => {
+    const names = new Set(baseCategoryOptions);
+    students.forEach((student) => {
+      const parsed = parseLegacyCategoryAndLevel(student.category);
+      if (parsed.category) names.add(parsed.category);
+    });
+    return [...names].sort((a, b) => {
+      const aNumber = Number(String(a).match(/\d+/)?.[0] || 999);
+      const bNumber = Number(String(b).match(/\d+/)?.[0] || 999);
+      return aNumber - bNumber || a.localeCompare(b);
+    });
+  }, [students]);
 
   const parseVideoUrl = (url) => {
     if (!url) return { type: "unknown", embedUrl: "" };
@@ -499,6 +544,7 @@ export default function AdminDashboard() {
   const resetManualStudentForm = () => {
     setManualStudentName("");
     setManualStudentAge("");
+    setManualLevel("initiation");
     setManualParentName("");
     setManualParentPhone("");
     setManualPaidCash(false);
@@ -515,13 +561,13 @@ export default function AdminDashboard() {
 
     try {
       const ageNum = Number(manualStudentAge);
-      let category = "Sub-8 Iniciación";
+      let category = "Sub-8";
       if (ageNum > 8 && ageNum <= 10) {
-        category = "Sub-10 Competitivo";
+        category = "Sub-10";
       } else if (ageNum > 10 && ageNum <= 12) {
-        category = "Sub-12 Elite";
+        category = "Sub-12";
       } else if (ageNum > 12) {
-        category = "Sub-15 Avanzado";
+        category = "Sub-15";
       }
 
       const studentData = {
@@ -534,6 +580,7 @@ export default function AdminDashboard() {
         parentUid: "",
         categoryId: categoryNameToId(category),
         category,
+        level: manualLevel || null,
         assignedCoachUid: "",
         assignment: "automatic",
         status: manualPaidCash ? "active" : "suspended",
@@ -565,17 +612,87 @@ export default function AdminDashboard() {
       await applyCategoryOverride(selectedStudent.studentId || selectedStudent.id, {
         category: newCategory,
         categoryId: categoryNameToId(newCategory),
+        level: newLevel || null,
         assignment: "manual_override",
         overrideReason: overrideReason.trim()
       });
-      setStudentSuccessMessage("Excepción de categoría guardada correctamente.");
+      setStudentSuccessMessage("Excepción de categoría y nivel guardada correctamente.");
       setSelectedStudent(null);
       setNewCategory("");
+      setNewLevel("");
       setOverrideReason("");
     } catch (err) {
       setStudentErrorMessage(err.message || "No fue posible guardar la excepción.");
     } finally {
       setStudentActionLoading(false);
+    }
+  };
+
+  const openCategoryOverride = (student) => {
+    const resolved = resolveStudentCategoryAndLevel(student);
+    setSelectedStudent(student);
+    setNewCategory(resolved.category || "");
+    setNewLevel(resolved.level || "");
+    setOverrideReason("");
+  };
+
+  const resetScheduleForm = () => {
+    setScheduleTitle("");
+    setScheduleDayOfWeek(1);
+    setScheduleStartTime("");
+    setScheduleEndTime("");
+    setScheduleCategory(categoryOptions[0] || "Sub-8");
+    setScheduleLevel("");
+    setScheduleCoachUid("");
+    setScheduleLocation("");
+    setScheduleDescription("");
+    setEditingScheduleId(null);
+  };
+
+  const handleSaveSchedule = async (event) => {
+    event.preventDefault();
+    const coach = scheduleCoaches.find((item) => item.uid === scheduleCoachUid);
+
+    try {
+      await saveSchedule({
+        title: scheduleTitle,
+        dayOfWeek: Number(scheduleDayOfWeek),
+        startTime: scheduleStartTime,
+        endTime: scheduleEndTime || null,
+        category: scheduleCategory,
+        level: scheduleLevel || null,
+        coachUid: coach?.uid || null,
+        coachName: coach?.name || null,
+        location: scheduleLocation,
+        description: scheduleDescription,
+        active: true
+      }, editingScheduleId);
+      resetScheduleForm();
+    } catch (err) {
+      // El hook muestra el error en la interfaz.
+    }
+  };
+
+  const handleEditSchedule = (schedule) => {
+    setEditingScheduleId(schedule.id);
+    setScheduleTitle(schedule.title || "");
+    setScheduleDayOfWeek(Number(schedule.dayOfWeek ?? 1));
+    setScheduleStartTime(schedule.startTime || "");
+    setScheduleEndTime(schedule.endTime || "");
+    setScheduleCategory(schedule.category || "Sub-8");
+    setScheduleLevel(schedule.level || "");
+    setScheduleCoachUid(schedule.coachUid || "");
+    setScheduleLocation(schedule.location || "");
+    setScheduleDescription(schedule.description || "");
+  };
+
+  const handleDeleteSchedule = async (scheduleId) => {
+    const confirmed = window.confirm("¿Eliminar este horario semanal?");
+    if (!confirmed) return;
+    try {
+      await deleteSchedule(scheduleId);
+    } catch (err) {
+      // El hook muestra el error en la interfaz.
     }
   };
 
@@ -1115,6 +1232,18 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <div>
+                        <label className="text-[9px] text-slate-400 font-bold block mb-1">Nivel deportivo</label>
+                        <select
+                          value={manualLevel}
+                          onChange={(event) => setManualLevel(event.target.value)}
+                          className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]"
+                        >
+                          {LEVEL_OPTIONS.map((level) => (
+                            <option key={level.value} value={level.value}>{level.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
                         <label className="text-[9px] text-slate-400 font-bold block mb-1">Nombre del representante</label>
                         <input
                           type="text"
@@ -1213,12 +1342,15 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-slate-450 block mt-0.5">{student.age || "-"} años</span>
                           <span className="text-[9px] text-slate-500 block mt-0.5">Estado: {student.status || "sin estado"}</span>
                         </div>
-                        <span className="bg-[#0e121e] px-2 py-0.5 rounded border border-slate-800 text-[9px] text-slate-350 font-medium">
-                          {student.category || "Sin categoría"}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="bg-[#0e121e] px-2 py-0.5 rounded border border-slate-800 text-[9px] text-slate-350 font-medium">
+                            {resolveStudentCategoryAndLevel(student).category || "Sin categoría"}
+                          </span>
+                          <LevelBadge level={resolveStudentCategoryAndLevel(student).level} />
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-850/50">
-                        <button type="button" onClick={() => setSelectedStudent(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer">
+                        <button type="button" onClick={() => openCategoryOverride(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer">
                           Excepción
                         </button>
                         <button type="button" onClick={() => handleOpenPhoneModal(student)} className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer">
@@ -1244,6 +1376,7 @@ export default function AdminDashboard() {
                         <th className="pb-3">Nombre</th>
                         <th className="pb-3">Edad</th>
                         <th className="pb-3">Categoría</th>
+                        <th className="pb-3">Nivel</th>
                         <th className="pb-3">Estado</th>
                         <th className="pb-3">Asignación</th>
                         <th className="pb-3 text-right">Acciones</th>
@@ -1252,17 +1385,18 @@ export default function AdminDashboard() {
                     <tbody className="divide-y divide-slate-800/40">
                       {studentsLoading ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">Cargando alumnos...</td>
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">Cargando alumnos...</td>
                         </tr>
                       ) : students.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-xs text-slate-500">Aún no hay registros</td>
+                          <td colSpan={7} className="py-6 text-center text-xs text-slate-500">Aún no hay registros</td>
                         </tr>
                       ) : students.map((student) => (
                         <tr key={student.id} className="text-xs">
                           <td className="py-3 font-bold text-slate-200">{student.name}</td>
                           <td className="py-3 text-slate-400">{student.age || "-"} años</td>
-                          <td className="py-3 text-slate-400">{student.category || "Sin categoría"}</td>
+                          <td className="py-3 text-slate-400">{resolveStudentCategoryAndLevel(student).category || "Sin categoría"}</td>
+                          <td className="py-3"><LevelBadge level={resolveStudentCategoryAndLevel(student).level} /></td>
                           <td className="py-3 text-slate-400">{student.status || "sin estado"}</td>
                           <td className="py-3">
                             <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
@@ -1275,7 +1409,7 @@ export default function AdminDashboard() {
                           </td>
                           <td className="py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button type="button" onClick={() => setSelectedStudent(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer">
+                              <button type="button" onClick={() => openCategoryOverride(student)} className="bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer">
                                 Excepción
                               </button>
                               <button type="button" onClick={() => handleOpenPhoneModal(student)} className="bg-slate-900 border border-slate-800 text-[#10b981] hover:text-[#34d399] text-[9px] font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer" title="Editar teléfono del acudiente">
@@ -1302,7 +1436,7 @@ export default function AdminDashboard() {
                     <div className="flex justify-between items-center gap-3">
                       <div className="flex items-center gap-1.5 text-amber-500">
                         <Sparkles className="w-4 h-4" />
-                        <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría: {selectedStudent.name}</h3>
+                        <h3 className="font-display font-bold text-xs uppercase tracking-wider">Forzar Categoría/Nivel: {selectedStudent.name}</h3>
                       </div>
                       <button type="button" onClick={() => setSelectedStudent(null)} className="text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase">
                         Cancelar
@@ -1313,13 +1447,21 @@ export default function AdminDashboard() {
                         <label className="text-[8px] text-slate-400 font-bold block mb-1">Nueva categoría</label>
                         <select required value={newCategory} onChange={(event) => setNewCategory(event.target.value)} className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]">
                           <option value="">-- Seleccionar --</option>
-                          <option value="Sub-8 Iniciación">Sub-8 Iniciación</option>
-                          <option value="Sub-10 Competitivo">Sub-10 Competitivo</option>
-                          <option value="Sub-12 Elite">Sub-12 Elite</option>
-                          <option value="Sub-15 Avanzado">Sub-15 Avanzado</option>
+                          {categoryOptions.map((category) => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
                         </select>
                       </div>
                       <div>
+                        <label className="text-[8px] text-slate-400 font-bold block mb-1">Nivel</label>
+                        <select value={newLevel} onChange={(event) => setNewLevel(event.target.value)} className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]">
+                          <option value="">Sin nivel específico</option>
+                          {LEVEL_OPTIONS.map((level) => (
+                            <option key={level.value} value={level.value}>{level.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
                         <label className="text-[8px] text-slate-400 font-bold block mb-1">Justificación técnica</label>
                         <input required value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Ej. Nivel superior o solicitud familiar" className="w-full bg-[#0e121e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-[#10b981]" />
                       </div>
@@ -1921,19 +2063,199 @@ export default function AdminDashboard() {
               <div className="pt-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
-                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Eventos</p>
-                    <p className="text-2xl font-black text-slate-100 mt-1">{events.length}</p>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Horarios semanales</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{trainingSchedules.length}</p>
                   </div>
                   <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
-                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Mostrados</p>
-                    <p className="text-2xl font-black text-slate-100 mt-1">{filteredEvents.length}</p>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Eventos únicos</p>
+                    <p className="text-2xl font-black text-slate-100 mt-1">{events.length}</p>
                   </div>
                   <div className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
                     <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Estado</p>
                     <p className="text-xs font-bold text-[#10b981] mt-2">
-                      {eventsLoading ? "Cargando" : "Sincronizado"}
+                      {eventsLoading || schedulesLoading ? "Cargando" : "Sincronizado"}
                     </p>
                   </div>
+                </div>
+
+                <form onSubmit={handleSaveSchedule} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-display font-black text-sm uppercase tracking-wider text-slate-200">
+                        {editingScheduleId ? "Editar horario semanal" : "Crear horario semanal"}
+                      </h2>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Los horarios se filtran por categoría y nivel sin afectar eventos, partidos ni RSVP.
+                      </p>
+                    </div>
+                    {editingScheduleId && (
+                      <button
+                        type="button"
+                        onClick={resetScheduleForm}
+                        className="px-3 py-2 rounded-xl border border-slate-800 text-slate-400 text-[10px] font-black uppercase hover:text-slate-200 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <input
+                      type="text"
+                      value={scheduleTitle}
+                      onChange={(event) => setScheduleTitle(event.target.value)}
+                      placeholder="Título del entrenamiento"
+                      required
+                      className="md:col-span-2 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <select
+                      value={scheduleDayOfWeek}
+                      onChange={(event) => setScheduleDayOfWeek(Number(event.target.value))}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      {WEEKDAY_OPTIONS.map((day) => (
+                        <option key={day.value} value={day.value}>{day.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="time"
+                      value={scheduleStartTime}
+                      onChange={(event) => setScheduleStartTime(event.target.value)}
+                      required
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    />
+                    <input
+                      type="time"
+                      value={scheduleEndTime}
+                      onChange={(event) => setScheduleEndTime(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    />
+                    <select
+                      value={scheduleCategory}
+                      onChange={(event) => setScheduleCategory(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      {categoryOptions.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={scheduleLevel}
+                      onChange={(event) => setScheduleLevel(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="">Todos los niveles</option>
+                      {LEVEL_OPTIONS.map((level) => (
+                        <option key={level.value} value={level.value}>{level.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={scheduleCoachUid}
+                      onChange={(event) => setScheduleCoachUid(event.target.value)}
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#10b981]"
+                    >
+                      <option value="">Sin entrenador asignado</option>
+                      {scheduleCoaches.map((coach) => (
+                        <option key={coach.uid} value={coach.uid}>{coach.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={scheduleLocation}
+                      onChange={(event) => setScheduleLocation(event.target.value)}
+                      placeholder="Sede o cancha"
+                      required
+                      className="bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981]"
+                    />
+                    <textarea
+                      value={scheduleDescription}
+                      onChange={(event) => setScheduleDescription(event.target.value)}
+                      placeholder="Descripción del entrenamiento"
+                      rows={3}
+                      className="md:col-span-4 bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-[#10b981] resize-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={schedulesActionLoading}
+                    className="px-4 py-2 rounded-xl bg-[#10b981] text-slate-950 text-[10px] font-black uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {schedulesActionLoading ? "Guardando..." : editingScheduleId ? "Guardar Horario" : "Crear Horario"}
+                  </button>
+                </form>
+
+                {(schedulesError || schedulesSuccessMessage) && (
+                  <div className={`p-3.5 rounded-xl text-xs ${
+                    schedulesError
+                      ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                      : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  }`}>
+                    {schedulesError || schedulesSuccessMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {schedulesLoading ? (
+                    <div className="md:col-span-2 py-8 text-center text-xs text-slate-500">
+                      Cargando horarios semanales...
+                    </div>
+                  ) : trainingSchedules.length === 0 ? (
+                    <div className="md:col-span-2 py-8 text-center text-xs text-slate-500">
+                      Aún no hay horarios semanales registrados.
+                    </div>
+                  ) : trainingSchedules.map((schedule) => (
+                    <article key={schedule.id} className="bg-[#07090e]/60 border border-slate-800 rounded-2xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-100">{schedule.title || "Horario sin título"}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">{schedule.description || "Sin descripción"}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase shrink-0 ${
+                          schedule.active ? "bg-emerald-500/10 text-[#10b981]" : "bg-slate-800 text-slate-400"
+                        }`}>
+                          {schedule.active ? "Activo" : "Inactivo"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 mt-4 text-[10px]">
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Día</p>
+                          <p className="text-slate-300 mt-1">{getWeekdayLabel(schedule.dayOfWeek)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Hora</p>
+                          <p className="text-slate-300 font-mono mt-1">{schedule.startTime || "--:--"}{schedule.endTime ? ` - ${schedule.endTime}` : ""}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Categoría</p>
+                          <p className="text-slate-300 mt-1">{schedule.category || "Sin categoría"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Nivel</p>
+                          <p className="text-slate-300 mt-1">{schedule.level ? getLevelLabel(schedule.level) : "Todos"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Entrenador</p>
+                          <p className="text-slate-300 mt-1">{schedule.coachName || "Sin asignar"}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-600 uppercase font-bold tracking-wider">Sede</p>
+                          <p className="text-slate-300 mt-1">{schedule.location || "Sin sede"}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        <button type="button" onClick={() => handleEditSchedule(schedule)} disabled={schedulesActionLoading} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-black uppercase hover:text-white transition-all disabled:opacity-50">
+                          <Pencil className="w-3 h-3" />
+                          Editar
+                        </button>
+                        <button type="button" onClick={() => toggleScheduleStatus(schedule.id, !schedule.active)} disabled={schedulesActionLoading} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-black uppercase hover:text-white transition-all disabled:opacity-50">
+                          {schedule.active ? "Desactivar" : "Activar"}
+                        </button>
+                        <button type="button" onClick={() => handleDeleteSchedule(schedule.id)} disabled={schedulesActionLoading} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[10px] font-black uppercase hover:bg-red-500/20 transition-all disabled:opacity-50">
+                          <Trash2 className="w-3 h-3" />
+                          Eliminar
+                        </button>
+                      </div>
+                    </article>
+                  ))}
                 </div>
 
                 <form onSubmit={handleSaveEvent} className="bg-[#07090e]/60 border border-slate-800/80 p-4 rounded-2xl space-y-3">
