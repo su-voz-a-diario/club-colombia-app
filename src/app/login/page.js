@@ -12,8 +12,6 @@ import { normalizeAndValidatePhone } from "@/lib/phone";
 import { RecaptchaVerifier, signInWithEmailAndPassword, signInWithPhoneNumber, sendPasswordResetEmail } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-const LUIS_DEBUG_EMAIL = "tododeportesluis@gmail.com";
-
 export default function Login() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("login"); // 'login' | 'register'
@@ -28,7 +26,6 @@ export default function Login() {
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [phoneCodeSent, setPhoneCodeSent] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [loginDiagnostic, setLoginDiagnostic] = useState(null);
   
   // Requisitos de seguridad para reCAPTCHA y carga
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -69,44 +66,12 @@ export default function Login() {
     return user?.role ? [user.role] : [];
   };
 
-  const updateLuisLoginDiagnostic = (email, patch) => {
-    const normalizedEmail = String(email || "").trim().toLowerCase();
-    if (normalizedEmail !== LUIS_DEBUG_EMAIL) return;
-
-    setLoginDiagnostic((prev) => ({
-      ...(prev || {}),
-      email: normalizedEmail,
-      updatedAt: new Date().toISOString(),
-      ...patch
-    }));
-  };
-
   const createSessionFromAuthUser = async (authUser, selectedRole) => {
     const idToken = await authUser.getIdToken();
-    console.log("[LOGIN DEBUG] POST session request", {
-      selectedRole,
-      endpoint: "/api/auth/session"
-    });
-    updateLuisLoginDiagnostic(authUser.email, {
-      selectedRoleSent: selectedRole,
-      sessionEndpoint: "/api/auth/session",
-      sessionRequestSent: true,
-      sessionResponseStatus: "pendiente",
-      result: "Petición a /api/auth/session enviada."
-    });
     const sessionResponse = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ idToken, selectedRole })
-    });
-    updateLuisLoginDiagnostic(authUser.email, {
-      selectedRoleSent: selectedRole,
-      sessionEndpoint: "/api/auth/session",
-      sessionRequestSent: true,
-      sessionResponseStatus: sessionResponse.status,
-      result: sessionResponse.ok
-        ? "El backend aceptó la sesión."
-        : "El backend rechazó la sesión."
     });
 
     if (!sessionResponse.ok) {
@@ -337,7 +302,6 @@ export default function Login() {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError("");
-    setLoginDiagnostic(null);
 
     if (loginRequestInFlightRef.current) return;
 
@@ -424,64 +388,13 @@ export default function Login() {
       }
 
       if (!userDocSnap.exists()) {
-        updateLuisLoginDiagnostic(authUser.email || loginEmail.toLowerCase(), {
-          loginUserType,
-          availableRoles: [],
-          userRole: null,
-          userRoles: null,
-          uid: authUser.uid,
-          userDocFound: false,
-          includesSelectedRole: false,
-          loginUserTypeIsAllowed: ["admin", "coach"].includes(loginUserType),
-          sessionRequestSent: false,
-          selectedRoleSent: null,
-          sessionEndpoint: "/api/auth/session",
-          sessionResponseStatus: null,
-          result: "No se encontró users/{uid} ni users/{email}."
-        });
         setLoginError("No se encontró el perfil de usuario en la base de datos.");
         return;
       }
 
       const user = userDocSnap.data();
       const availableRoles = getAvailableRoles(user);
-      console.log("[LOGIN DEBUG] Before role validation", {
-        loginUserType,
-        availableRoles,
-        userRole: user.role,
-        userRoles: user.roles,
-        email: authUser.email || loginEmail.toLowerCase(),
-        uid: authUser.uid
-      });
-      updateLuisLoginDiagnostic(authUser.email || loginEmail.toLowerCase(), {
-        loginUserType,
-        availableRoles,
-        userRole: user.role || null,
-        userRoles: user.roles || null,
-        uid: authUser.uid,
-        userDocFound: true,
-        includesSelectedRole: availableRoles.includes(loginUserType),
-        loginUserTypeIsAllowed: ["admin", "coach"].includes(loginUserType),
-        sessionRequestSent: false,
-        selectedRoleSent: null,
-        sessionEndpoint: "/api/auth/session",
-        sessionResponseStatus: null,
-        result: "Validación de roles en cliente pendiente."
-      });
       if (!availableRoles.includes(loginUserType) || !["admin", "coach"].includes(loginUserType)) {
-        console.log("[LOGIN DEBUG] Role validation failed", {
-          availableRolesIncludesLoginUserType: availableRoles.includes(loginUserType),
-          loginUserTypeIsAllowed: ["admin", "coach"].includes(loginUserType),
-          loginUserType,
-          availableRoles,
-          userRole: user.role,
-          userRoles: user.roles,
-          email: authUser.email || loginEmail.toLowerCase(),
-          uid: authUser.uid
-        });
-        updateLuisLoginDiagnostic(authUser.email || loginEmail.toLowerCase(), {
-          result: "Falló la validación de roles en el cliente. No se envió /api/auth/session."
-        });
         setLoginError("El tipo de usuario seleccionado no corresponde a esta cuenta.");
         return;
       }
@@ -505,19 +418,6 @@ export default function Login() {
       loginRequestInFlightRef.current = false;
     }
   };
-
-  const shouldShowLoginDiagnostic =
-    loginError &&
-    loginDiagnostic &&
-    String(loginEmail || "").trim().toLowerCase() === LUIS_DEBUG_EMAIL;
-  const diagnosticBoolean = (value) => {
-    if (value === true) return "Sí";
-    if (value === false) return "No";
-    return "Sin dato";
-  };
-  const diagnosticJson = (value) => value === undefined || value === null
-    ? "Sin dato"
-    : JSON.stringify(value);
 
   return (
     <div className="min-h-screen flex flex-col justify-center bg-[#07090e] px-4 py-8 relative overflow-hidden select-none">
@@ -585,29 +485,6 @@ export default function Login() {
             {loginError && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-[11px] text-center space-y-2">
                 <div>{loginError}</div>
-                {shouldShowLoginDiagnostic && (
-                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-left text-[10px] text-amber-100">
-                    <p className="font-black uppercase tracking-wider text-amber-300 mb-2">
-                      Diagnóstico temporal
-                    </p>
-                    <div className="space-y-1 font-mono leading-relaxed">
-                      <p>Rol seleccionado: {loginDiagnostic.loginUserType || "Sin dato"}</p>
-                      <p>Roles encontrados: {diagnosticJson(loginDiagnostic.availableRoles)}</p>
-                      <p>Role legacy: {loginDiagnostic.userRole || "Sin dato"}</p>
-                      <p>user.roles: {diagnosticJson(loginDiagnostic.userRoles)}</p>
-                      <p>Email: {loginDiagnostic.email || "Sin dato"}</p>
-                      <p>UID: {loginDiagnostic.uid || "Sin dato"}</p>
-                      <p>¿Existe users/{"{uid}"}?: {diagnosticBoolean(loginDiagnostic.userDocFound)}</p>
-                      <p>¿Incluye el rol seleccionado?: {diagnosticBoolean(loginDiagnostic.includesSelectedRole)}</p>
-                      <p>¿Tipo seleccionado permitido?: {diagnosticBoolean(loginDiagnostic.loginUserTypeIsAllowed)}</p>
-                      <p>¿Se envió /api/auth/session?: {diagnosticBoolean(loginDiagnostic.sessionRequestSent)}</p>
-                      <p>Rol enviado: {loginDiagnostic.selectedRoleSent || "Sin dato"}</p>
-                      <p>Endpoint: {loginDiagnostic.sessionEndpoint || "Sin dato"}</p>
-                      <p>Código respuesta backend: {loginDiagnostic.sessionResponseStatus ?? "Sin dato"}</p>
-                      <p>Resultado: {loginDiagnostic.result || "Sin dato"}</p>
-                    </div>
-                  </div>
-                )}
                 {loginUserType === "parent" && (
                   <button
                     type="button"
@@ -639,7 +516,6 @@ export default function Login() {
                     onClick={() => {
                       setLoginUserType(type);
                       setLoginError("");
-                      setLoginDiagnostic(null);
                     }}
                     className={`py-2 rounded-lg text-[9px] font-bold uppercase transition-all ${
                       loginUserType === type ? "bg-[#10b981] text-slate-950" : "text-slate-400 hover:text-slate-200"
@@ -692,10 +568,7 @@ export default function Login() {
                       required
                       placeholder="ejemplo@correo.com"
                       value={loginEmail}
-                      onChange={(e) => {
-                        setLoginEmail(e.target.value);
-                        setLoginDiagnostic(null);
-                      }}
+                      onChange={(e) => setLoginEmail(e.target.value)}
                       className="w-full bg-[#07090e] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-700 focus:outline-none focus:border-brand-green"
                     />
                   </div>
