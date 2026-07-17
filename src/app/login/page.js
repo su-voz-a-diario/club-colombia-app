@@ -58,12 +58,20 @@ export default function Login() {
     }
   }, []);
 
-  const createSessionFromAuthUser = async (authUser) => {
+  const getAvailableRoles = (user) => {
+    if (Array.isArray(user?.roles) && user.roles.length > 0) {
+      return user.roles;
+    }
+
+    return user?.role ? [user.role] : [];
+  };
+
+  const createSessionFromAuthUser = async (authUser, selectedRole) => {
     const idToken = await authUser.getIdToken();
     const sessionResponse = await fetch("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken })
+      body: JSON.stringify({ idToken, selectedRole })
     });
 
     if (!sessionResponse.ok) {
@@ -351,7 +359,7 @@ export default function Login() {
       setIsLoggingIn(true);
       try {
         const userCredential = await confirmationResult.confirm(smsCode);
-        await createSessionFromAuthUser(userCredential.user);
+        await createSessionFromAuthUser(userCredential.user, "parent");
         router.push("/dashboard/parent");
       } catch (err) {
         console.error("Error al confirmar código SMS:", err);
@@ -385,16 +393,17 @@ export default function Login() {
       }
 
       const user = userDocSnap.data();
-      if (user.role !== loginUserType || !["admin", "coach"].includes(user.role)) {
+      const availableRoles = getAvailableRoles(user);
+      if (!availableRoles.includes(loginUserType) || !["admin", "coach"].includes(loginUserType)) {
         setLoginError("El tipo de usuario seleccionado no corresponde a esta cuenta.");
         return;
       }
 
-      await createSessionFromAuthUser(authUser);
+      await createSessionFromAuthUser(authUser, loginUserType);
 
-      if (user.role === "admin") {
+      if (loginUserType === "admin") {
         router.push("/dashboard/admin");
-      } else if (user.role === "coach") {
+      } else if (loginUserType === "coach") {
         router.push("/dashboard/coach");
       }
     } catch (err) {

@@ -1,6 +1,7 @@
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { getSessionCookieName, SESSION_EXPIRES_IN_MS } from "@/lib/authSession";
 import { normalizeAndValidatePhone } from "@/lib/phone";
+import crypto from "crypto";
 
 const ALLOWED_ROLES = new Set(["admin", "coach", "parent"]);
 const MAX_ID_TOKEN_AGE_SECONDS = 5 * 60;
@@ -9,10 +10,70 @@ function normalizeEmail(email) {
   return typeof email === "string" ? email.toLowerCase() : "";
 }
 
-function buildSessionFromProfile(decodedToken, profile, extra = {}) {
-  if (!ALLOWED_ROLES.has(profile.role)) {
-    return null;
+function getRoleCookieSecret() {
+  return process.env.AUTH_SESSION_SECRET ||
+    process.env.FIREBASE_PRIVATE_KEY ||
+    "club-colombia-local-session-secret";
+}
+
+function signSelectedRole(sessionCookie, role) {
+  return crypto
+    .createHmac("sha256", getRoleCookieSecret())
+    .update(`${sessionCookie}.${role}`)
+    .digest("base64url");
+}
+
+export function createSelectedRoleCookieValue(sessionCookie, role) {
+  return `${role}.${signSelectedRole(sessionCookie, role)}`;
+}
+
+function readSelectedRoleCookieValue(sessionCookie, cookieValue) {
+  if (!sessionCookie || typeof cookieValue !== "string") return "";
+  const separatorIndex = cookieValue.indexOf(".");
+  if (separatorIndex <= 0) return "";
+
+  const role = cookieValue.slice(0, separatorIndex);
+  const signature = cookieValue.slice(separatorIndex + 1);
+  if (!ALLOWED_ROLES.has(role) || !signature) return "";
+
+  const expected = signSelectedRole(sessionCookie, role);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (signatureBuffer.length !== expectedBuffer.length) return "";
+
+  return crypto.timingSafeEqual(signatureBuffer, expectedBuffer) ? role : "";
+}
+
+function normalizeProfileRoles(profile) {
+  const roles = Array.isArray(profile.roles)
+    ? profile.roles.filter((role) => ALLOWED_ROLES.has(role))
+    : [];
+
+  if (roles.length > 0) {
+    return [...new Set(roles)];
   }
+
+  return ALLOWED_ROLES.has(profile.role) ? [profile.role] : [];
+}
+
+function resolveSessionRole(profile, selectedRole = "") {
+  const availableRoles = normalizeProfileRoles(profile);
+  const requestedRole = ALLOWED_ROLES.has(selectedRole) ? selectedRole : "";
+
+  if (requestedRole) {
+    return availableRoles.includes(requestedRole) ? requestedRole : "";
+  }
+
+  if (ALLOWED_ROLES.has(profile.role) && availableRoles.includes(profile.role)) {
+    return profile.role;
+  }
+
+  return availableRoles[0] || "";
+}
+
+function buildSessionFromProfile(decodedToken, profile, extra = {}, selectedRole = "") {
+  const sessionRole = resolveSessionRole(profile, selectedRole);
+  if (!sessionRole) return null;
 
   if (profile.uid && profile.uid !== decodedToken.uid) {
     return null;
@@ -22,14 +83,14 @@ function buildSessionFromProfile(decodedToken, profile, extra = {}) {
     uid: decodedToken.uid,
     email: profile.email || normalizeEmail(decodedToken.email),
     phone: profile.phone || decodedToken.phone_number || "",
-    role: profile.role,
+    role: sessionRole,
     status: profile.status || "active",
     studentIds: Array.isArray(profile.studentIds) ? profile.studentIds : [],
     ...extra
   };
 }
 
-async function getEmailUserProfile(decodedToken) {
+async function getEmailUserProfile(decodedToken, selectedRole = "") {
   const email = normalizeEmail(decodedToken.email);
   if (!email || !decodedToken.uid) {
     return null;
@@ -38,7 +99,7 @@ async function getEmailUserProfile(decodedToken) {
   const db = getAdminDb();
   const uidDoc = await db.collection("users").doc(decodedToken.uid).get();
   if (uidDoc.exists) {
-    const session = buildSessionFromProfile(decodedToken, uidDoc.data());
+    const session = buildSessionFromProfile(decodedToken, uidDoc.data(), {}, selectedRole);
     if (session?.role === "parent") {
       return null;
     }
@@ -53,7 +114,7 @@ async function getEmailUserProfile(decodedToken) {
     return null;
   }
 
-  const session = buildSessionFromProfile(decodedToken, emailDoc.data());
+  const session = buildSessionFromProfile(decodedToken, emailDoc.data(), {}, selectedRole);
   if (session?.role === "parent") {
     return null;
   }
@@ -178,15 +239,15 @@ async function getPhoneParentProfile(decodedToken) {
   }, { studentIds });
 }
 
-async function getCurrentUserProfile(decodedToken) {
+async function getCurrentUserProfile(decodedToken, selectedRole = "") {
   if (decodedToken.phone_number) {
     return getPhoneParentProfile(decodedToken);
   }
 
-  return getEmailUserProfile(decodedToken);
+  return getEmailUserProfile(decodedToken, selectedRole);
 }
 
-export async function createVerifiedSessionCookie(idToken) {
+export async function createVerifiedSessionCookie(idToken, selectedRole = "") {
   const decodedToken = await getAdminAuth().verifyIdToken(idToken, true);
   const authTime = decodedToken.auth_time || 0;
   const now = Math.floor(Date.now() / 1000);
@@ -195,7 +256,7 @@ export async function createVerifiedSessionCookie(idToken) {
     throw new Error("El inicio de sesión debe ser reciente");
   }
 
-  const session = await getCurrentUserProfile(decodedToken);
+  const session = await getCurrentUserProfile(decodedToken, selectedRole);
   if (!session) {
     throw new Error("Perfil de usuario no autorizado");
   }
@@ -214,5 +275,10 @@ export async function getVerifiedSessionFromRequest(request) {
   }
 
   const decodedToken = await getAdminAuth().verifySessionCookie(sessionCookie, true);
-  return getCurrentUserProfile(decodedToken);
+  const selectedRole = readSelectedRoleCookieValue(
+    sessionCookie,
+    request.cookies.get("cc_selected_role")?.value ||
+      request.cookies.get("__Host-cc_selected_role")?.value
+  );
+  return getCurrentUserProfile(decodedToken, selectedRole);
 }

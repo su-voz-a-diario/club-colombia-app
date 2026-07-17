@@ -5,6 +5,10 @@ export function getSessionCookieName() {
   return process.env.NODE_ENV === "production" ? "__Host-cc_session" : "cc_session";
 }
 
+export function getSelectedRoleCookieName() {
+  return process.env.NODE_ENV === "production" ? "__Host-cc_selected_role" : "cc_selected_role";
+}
+
 export function getSessionCookieOptions() {
   return {
     httpOnly: true,
@@ -16,5 +20,5 @@ export function getSessionCookieOptions() {
 }
 
 export function getSessionCookieNamesToClear() {
-  return ["cc_session", "__Host-cc_session"];
+  return ["cc_session", "__Host-cc_session", "cc_selected_role", "__Host-cc_selected_role"];
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionCookieName } from "@/lib/authSession";
+import { getSelectedRoleCookieName, getSessionCookieName } from "@/lib/authSession";
 
 /**
  * Middleware de Next.js para interceptar peticiones del lado del servidor.
@@ -15,7 +15,9 @@ import { getSessionCookieName } from "@/lib/authSession";
 export async function middleware(request) {
   const url = request.nextUrl.clone();
   const cookieName = getSessionCookieName();
+  const selectedRoleCookieName = getSelectedRoleCookieName();
   const sessionCookie = request.cookies.get(cookieName)?.value;
+  const selectedRoleCookie = request.cookies.get(selectedRoleCookieName)?.value;
 
   if (!sessionCookie) {
     return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
@@ -23,7 +25,10 @@ export async function middleware(request) {
 
   const sessionResponse = await fetch(new URL("/api/auth/session", request.url), {
     headers: {
-      cookie: `${cookieName}=${sessionCookie}`
+      cookie: [
+        `${cookieName}=${sessionCookie}`,
+        selectedRoleCookie ? `${selectedRoleCookieName}=${selectedRoleCookie}` : ""
+      ].filter(Boolean).join("; ")
     },
     cache: "no-store"
   });

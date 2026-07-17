@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSessionCookieNamesToClear, getSessionCookieOptions, getSessionCookieName } from "@/lib/authSession";
-import { createVerifiedSessionCookie, getVerifiedSessionFromRequest } from "@/lib/serverAuth";
+import { getSessionCookieNamesToClear, getSessionCookieOptions, getSessionCookieName, getSelectedRoleCookieName } from "@/lib/authSession";
+import { createSelectedRoleCookieValue, createVerifiedSessionCookie, getVerifiedSessionFromRequest } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,14 +30,22 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { idToken } = await request.json();
+    const { idToken, selectedRole } = await request.json();
     if (!idToken || typeof idToken !== "string") {
       return NextResponse.json({ error: "idToken es obligatorio" }, { status: 400 });
     }
+    if (selectedRole !== undefined && typeof selectedRole !== "string") {
+      return NextResponse.json({ error: "selectedRole no válido" }, { status: 400 });
+    }
 
-    const { sessionCookie, session } = await createVerifiedSessionCookie(idToken);
+    const { sessionCookie, session } = await createVerifiedSessionCookie(idToken, selectedRole || "");
     const response = NextResponse.json({ success: true, ...session });
     response.cookies.set(getSessionCookieName(), sessionCookie, getSessionCookieOptions());
+    response.cookies.set(
+      getSelectedRoleCookieName(),
+      createSelectedRoleCookieValue(sessionCookie, session.role),
+      getSessionCookieOptions()
+    );
 
     return response;
   } catch (error) {
