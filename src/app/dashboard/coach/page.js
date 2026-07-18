@@ -51,7 +51,11 @@ export default function CoachDashboard() {
   const handleLevelChange = async (studentId, level) => {
     try {
       setLevelMessage("");
-      await updateStudentLevel(studentId, level);
+      const result = await updateStudentLevel(studentId, level);
+      setAttendance(prev => prev.map(athlete => {
+        const currentId = athlete.studentId || athlete.id;
+        return currentId === studentId ? { ...athlete, level: result.level || null } : athlete;
+      }));
       setLevelMessage("Nivel actualizado correctamente.");
       setTimeout(() => setLevelMessage(""), 2500);
     } catch (err) {
@@ -70,6 +74,8 @@ export default function CoachDashboard() {
             studentId: s.studentId || s.id,
             name: s.name,
             status: existing ? existing.status : null,
+            category: s.category || "",
+            level: s.level || null,
             healthStatus: s.healthStatus || "optimal"
           };
         });
